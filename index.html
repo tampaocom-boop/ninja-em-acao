@@ -224,19 +224,24 @@ function musicTick(dt) {
 // ---------- Controles ----------
 const keys = { left: false, right: false, down: false, jump: false };
 let jumpPressed = false;
+function titleKey(k, code) {
+  if (k === 'left') modo = (modo + 2) % 3;
+  else if (k === 'right') modo = (modo + 1) % 3;
+  else if (k === 'jump') startGame(modo);
+}
 const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowDown: 'down', KeyS: 'down',
-  Space: 'jump', ArrowUp: 'jump', KeyW: 'jump' };
+  Space: 'jump', ArrowUp: 'jump', KeyW: 'jump', Enter: 'jump' };
 window.addEventListener('keydown', e => {
   const k = KEYMAP[e.code]; if (!k) return; e.preventDefault(); audio();
   if (k === 'jump' && !keys.jump) jumpPressed = true; keys[k] = true;
-  if (state === 'title' && (k === 'jump')) startGame();
+  if (state === 'title') titleKey(k, e.code);
 });
 ['touchend','click'].forEach(ev => window.addEventListener(ev, () => audio(), { passive: true }));
 window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
 function bindBtn(id, k) {
   const b = document.getElementById(id);
   const on = e => { e.preventDefault(); audio(); if (k === 'jump' && !keys.jump) jumpPressed = true; keys[k] = true; b.classList.add('on');
-    if (state === 'title') startGame(); };
+    if (state === 'title') titleKey(k); };
   const off = e => { e.preventDefault(); keys[k] = false; b.classList.remove('on'); };
   b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
   b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
@@ -252,7 +257,6 @@ cv.addEventListener('pointerdown', e => {
   audio();
   const r = cv.getBoundingClientRect();
   const x = (e.clientX - r.left) / r.width * W - 240, y = 180 - (e.clientY - r.top) / r.height * H;
-  if (state === 'title') { startGame(); return; }
   for (const c of clickables) if (Math.abs(x - c.x) < c.w / 2 && Math.abs(y - c.y) < c.h / 2) { SFX.pop(); c.fn(); return; }
 });
 
@@ -277,20 +281,39 @@ const fl = { show: false, x: 260, y: -22, name: 'pombo-voador', t: 0, dur: 3, wa
 const bomb = { show: false, x: 0, y: 0, name: 'bomba', size: 1 };
 const hp = { show: false, x: 260, y: -80, t: 0, dur: 3, at: 10, done: false, pop: 0, popX: 0, popY: 0 };   // coração que dá vida
 let stars = [], confetti = [];
-const vel = () => 2.2 - 0.25 * fase;
+// Modos de dificuldade
+const MODES = [
+  { nome: 'Fácil',   cor: '#2ea44f', vidas: 5, veloc: 0.8,  espera: [0.8, 1.8], voador: [3.5, 6], coracoes: 2 },
+  { nome: 'Médio',   cor: '#d4a017', vidas: 3, veloc: 1.0,  espera: [0.2, 1.2], voador: [2, 5],   coracoes: 1 },
+  { nome: 'Difícil', cor: '#d63a2f', vidas: 3, veloc: 1.35, espera: [0.35, 0.9], voador: [1, 2.5], coracoes: 1 },
+];
+let modo = 1;
+try { const g = localStorage.getItem('ninja-modo'); if (g === '0' || g === '1' || g === '2') modo = +g; } catch (e) {}
+const M = () => MODES[modo];
+const rnd = (a) => a[0] + Math.random() * (a[1] - a[0]);
+const vel = () => (2.2 - 0.25 * fase) / M().veloc;   // segundos para atravessar a tela
 
 function resetAll() {
   routines = []; stars = []; confetti = []; clickables.length = 0;
-  fase = 1; vidas = 3; tempo = 0; jogo2 = false;
+  fase = 1; vidas = M().vidas; tempo = 0; jogo2 = false;
   Object.assign(dp, { x: -170, y: -60, cost: 'dead-power-1-parado', jumpF: -1, blink: 0, dance: false });
   cz.show = false; ma.show = false; ob.show = false; fl.show = false; bomb.show = false; hp.show = false; hp.pop = 0;
 }
-function startGame() { resetAll(); showLogo = 2; startPhase(); }
+function startGame(m) {
+  if (m != null) { modo = m; try { localStorage.setItem('ninja-modo', String(m)); } catch (e) {} }
+  resetAll(); showLogo = 2; startPhase();
+}
+function goTitle() { resetAll(); state = 'title'; song = -1; titleButtons(); }
+function titleButtons() {
+  clickables.length = 0;
+  MODES.forEach((md, i) => clickables.push({ x: -130 + i * 130, y: -30, w: 116, h: 46, fn: () => startGame(i) }));
+}
+titleButtons();
 
 function startPhase() {
   state = 'intro'; tempo = 0; timer = 0; phaseBanner = 2; SFX.phase();
-  ob.show = false; ob.wait = 0.3; fl.show = false; fl.wait = 2 + Math.random() * 2;
-  hp.show = false; hp.done = false; hp.at = 5 + Math.random() * 9;
+  ob.show = false; ob.wait = 0.3; fl.show = false; fl.wait = rnd(M().voador);
+  hp.show = false; hp.left = M().coracoes; hp.at = 4 + Math.random() * (M().coracoes > 1 ? 4 : 9);
   cz.show = fase >= 4; cz.x = -95; cz.y = -63; cz.size = 1; cz.say = '';
   ma.show = fase >= 4; ma.x = 200; ma.y = -40; ma.rot = 0;
   song = fase - 1; songStep = 0;
@@ -352,7 +375,7 @@ function startFinal() {
   run(function* () {
     yield* wait(2.5);
     clickables.push({ x: 0, y: -100, w: 300, h: 56, fn: () => { jogo2 = true; } });
-    clickables.push({ x: 0, y: -150, w: 300, h: 56, fn: () => startGame() });
+    clickables.push({ x: 0, y: -150, w: 300, h: 56, fn: () => goTitle() });
   });
 }
 
@@ -422,23 +445,23 @@ function update() {
       }
     } else {
       ob.t += dt; ob.x = 260 - 520 * Math.min(1, ob.t / ob.dur);
-      if (ob.t >= ob.dur) { ob.show = false; ob.wait = 0.2 + Math.random(); }
+      if (ob.t >= ob.dur) { ob.show = false; ob.wait = rnd(M().espera); }
     }
     // obstáculo voador (nunca junto com o de baixo perto do ninja)
     if (!fl.show) {
       fl.wait -= dt;
       if (fl.wait <= 0 && (!ob.show || ob.x < -150)) {
-        fl.name = FLYERS[Math.floor(Math.random() * 2)]; fl.x = 260; fl.t = 0; fl.dur = vel() + 0.8; fl.show = true;
+        fl.name = FLYERS[Math.floor(Math.random() * 2)]; fl.x = 260; fl.t = 0; fl.dur = vel() + 0.8 / M().veloc; fl.show = true;
       }
     } else {
       fl.t += dt; fl.x = 260 - 520 * Math.min(1, fl.t / fl.dur);
-      if (fl.t >= fl.dur) { fl.show = false; fl.wait = 2 + Math.random() * 3; }
+      if (fl.t >= fl.dur) { fl.show = false; fl.wait = rnd(M().voador); }
     }
 
     // coração de vida: aparece uma vez por fase, no chão ou no alto
-    if (!hp.done && tempo >= hp.at && !fl.show && (!ob.show || ob.x < dp.x - 40)) {
+    if (hp.left > 0 && !hp.show && tempo >= hp.at && !fl.show && (!ob.show || ob.x < dp.x - 40)) {
       ob.wait = Math.max(ob.wait, 1.2);   // dá um tempinho sem obstáculo para pegar o coração
-      hp.done = true; hp.show = true; hp.x = 260; hp.t = 0; hp.dur = vel() + 1;
+      hp.left--; hp.at = tempo + 6 + Math.random() * 3; hp.show = true; hp.x = 260; hp.t = 0; hp.dur = vel() + 1;
       hp.y = Math.random() < 0.5 ? -85 : 35;
     }
     if (hp.show) {
@@ -447,7 +470,7 @@ function update() {
       const hb = { l: hp.x - 13, r: hp.x + 13, b: hp.y - 12, t: hp.y + 12 };
       if (overlap(dpBox(), hb)) {
         hp.show = false; SFX.life();
-        if (vidas < 3) vidas++;
+        if (vidas < M().vidas) vidas++;
         hp.pop = 1; hp.popX = hp.x; hp.popY = hp.y;
       }
     }
@@ -488,7 +511,17 @@ function render() {
     draw('cinzento', 170, -63);
     draw('titulo-ninja-em-acao', 0, 70, { size: 1.1 });
     const a = 0.6 + 0.4 * Math.sin(frame / 6);
-    text(loaded < files.length ? 'Carregando...' : 'Toque para jogar!', 0, -10, 24, `rgba(255,255,255,${a})`, { stroke: '#1a2438', strokeW: 5 });
+    if (loaded < files.length) text('Carregando...', 0, -10, 24, '#fff', { stroke: '#1a2438', strokeW: 5 });
+    else {
+      text('Escolha o modo:', 0, 12, 18, `rgba(255,255,255,${a})`, { stroke: '#1a2438', strokeW: 5 });
+      MODES.forEach((md, i) => {
+        const x = -130 + i * 130, sel = i === modo;
+        roundRect(x, -30, sel ? 122 : 112, sel ? 50 : 44, 12, md.cor, sel ? '#fff' : '#1a2438');
+        text(md.nome.toUpperCase(), x, -30, sel ? 19 : 17, '#fff', { stroke: '#1a2438', strokeW: 4 });
+      });
+      const d = ['5 vidas • mais devagar • 2 corações', '3 vidas • 1 coração por fase', '3 vidas • bem rápido!'][modo];
+      text(d, 0, -72, 13, '#fff', { stroke: '#1a2438', strokeW: 4, weight: 700 });
+    }
     text('Pular: espaço ou PULAR • Abaixar: ▼ • Correr: ◀ ▶', 0, -160, 12, '#fff', { stroke: '#1a2438', strokeW: 4, weight: 700 });
     return;
   }
@@ -518,11 +551,12 @@ function render() {
 
   // painel: fase, tempo e corações
   if (state !== 'final') {
-    roundRect(-172, 162, 128, 26, 10, 'rgba(10,14,34,0.75)');
+    roundRect(-160, 162, 152, 26, 10, 'rgba(10,14,34,0.75)');
     text(`Fase ${fase}`, -228, 162, 14, '#ffd34a', { align: 'left' });
+    text(M().nome, -160, 162, 11, M().cor, { weight: 800 });
     const left = Math.max(0, PHASE_SECONDS - tempo);
-    text(`⏱ ${left}s`, -122, 162, 14, '#fff', { align: 'right' });
-    for (let i = 0; i < 3; i++) if (vidas > i) draw('coracao-vida', 220 - i * 30, 160);
+    text(`⏱ ${left}s`, -92, 162, 14, '#fff', { align: 'right' });
+    for (let i = 0; i < vidas; i++) draw('coracao-vida', 220 - i * 30, 160);
   }
   if (phaseBanner > 0 && state !== 'final') draw('nome-fase-' + fase, 0, 110);
   if (showLogo > 0) draw('titulo-ninja-em-acao', 0, 30);
@@ -550,7 +584,7 @@ requestAnimationFrame(loop);
 document.addEventListener('visibilitychange', () => { if (document.hidden && AC) AC.suspend(); else if (AC && !muted) AC.resume(); });
 
 // ganchos para testes automáticos
-window.__ninja = { get state() { return state; }, get fase() { return fase; }, get vidas() { return vidas; }, get tempo() { return tempo; },
+window.__ninja = { get state() { return state; }, get fase() { return fase; }, get vidas() { return vidas; }, get tempo() { return tempo; }, get modo() { return modo; },
   clickables, dp, ob, fl, hp, keys, press: k => { if (k === 'jump') jumpPressed = true; }, start: startGame, setVidas: v => { vidas = v; }, dpBox, objBox };
 })();
 
