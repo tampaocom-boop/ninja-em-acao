@@ -271,7 +271,7 @@ function* glide(o, x, y, sec) {
 
 // ---------- Estado ----------
 let state = 'title';       // title, intro, play, cutscene, gameover, final
-let fase = 1, vidas = 3, tempo = 0, timer = 0, frame = 0;
+let fase = 1, vidas = 3, tempo = 0, timer = 0, frame = 0, clock = 0;
 let showLogo = 0, phaseBanner = 0, jogo2 = false;
 const dp = { x: -170, y: -60, cost: 'dead-power-1-parado', jumpF: -1, blink: 0, dance: false };
 const cz = { x: 170, y: -63, show: false, size: 1, say: '', sayT: 0, bob: 0 };
@@ -283,9 +283,9 @@ const hp = { show: false, x: 260, y: -80, t: 0, dur: 3, at: 10, done: false, pop
 let stars = [], confetti = [];
 // Modos de dificuldade
 const MODES = [
-  { nome: 'Fácil',   cor: '#2ea44f', vidas: 5, veloc: 0.8,  espera: [0.8, 1.8], voador: [3.5, 6], coracoes: 2 },
-  { nome: 'Médio',   cor: '#d4a017', vidas: 3, veloc: 1.0,  espera: [0.2, 1.2], voador: [2, 5],   coracoes: 1 },
-  { nome: 'Difícil', cor: '#d63a2f', vidas: 3, veloc: 1.35, espera: [0.35, 0.9], voador: [1, 2.5], coracoes: 1 },
+  { nome: 'Fácil',   cor: '#2ea44f', vidas: 3, veloc: 1.35, espera: [0.35, 0.9],  voador: [1, 2.5],   coracoes: 1 },
+  { nome: 'Médio',   cor: '#d4a017', vidas: 3, veloc: 1.65, espera: [0.25, 0.7],  voador: [0.8, 2],   coracoes: 1 },
+  { nome: 'Difícil', cor: '#d63a2f', vidas: 2, veloc: 1.95, espera: [0.15, 0.55], voador: [0.6, 1.5], coracoes: 1 },
 ];
 let modo = 1;
 try { const g = localStorage.getItem('ninja-modo'); if (g === '0' || g === '1' || g === '2') modo = +g; } catch (e) {}
@@ -431,7 +431,7 @@ function update() {
   } else cz.bob = 0;
 
   if (state === 'play') {
-    timer += dt;
+    timer += dt; clock += dt;
     if (timer >= 1) { timer -= 1; tempo++; }
     if (tempo >= PHASE_SECONDS) { endPhase(); return; }
 
@@ -444,13 +444,17 @@ function update() {
         ob.y = TALL.includes(ob.name) ? -75 : -92; ob.x = 260; ob.t = 0; ob.dur = vel(); ob.show = true;
       }
     } else {
+      const antes = ob.x;
       ob.t += dt; ob.x = 260 - 520 * Math.min(1, ob.t / ob.dur);
-      if (ob.t >= ob.dur) { ob.show = false; ob.wait = rnd(M().espera); }
+      if (antes > dp.x && ob.x <= dp.x) ob.passedAt = clock;   // hora em que passou pelo ninja
+      if (ob.t >= ob.dur) { ob.show = false; ob.wait = Math.max(rnd(M().espera), 1.05 - ob.dur); }   // nunca fica impossível
     }
     // obstáculo voador (nunca junto com o de baixo perto do ninja)
     if (!fl.show) {
       fl.wait -= dt;
-      if (fl.wait <= 0 && (!ob.show || ob.x < -150)) {
+      const flDur = vel() + 0.8 / M().veloc;
+      const chegada = clock + (260 - dp.x) * flDur / 520;          // quando o voador chegaria no ninja
+      if (fl.wait <= 0 && !hp.show && (!ob.show || ob.x < dp.x - 40) && chegada - (ob.passedAt || -9) >= 1.4) {
         fl.name = FLYERS[Math.floor(Math.random() * 2)]; fl.x = 260; fl.t = 0; fl.dur = vel() + 0.8 / M().veloc; fl.show = true;
       }
     } else {
@@ -461,15 +465,17 @@ function update() {
     // coração de vida: aparece uma vez por fase, no chão ou no alto
     if (hp.left > 0 && !hp.show && tempo >= hp.at && !fl.show && (!ob.show || ob.x < dp.x - 40)) {
       ob.wait = Math.max(ob.wait, 1.2);   // dá um tempinho sem obstáculo para pegar o coração
-      hp.left--; hp.at = tempo + 6 + Math.random() * 3; hp.show = true; hp.x = 260; hp.t = 0; hp.dur = vel() + 1;
+      hp.left--; hp.at = tempo + 6 + Math.random() * 3; hp.show = true; hp.x = 260; hp.t = 0; hp.dur = vel();
       hp.y = Math.random() < 0.5 ? -85 : 35;
     }
     if (hp.show) {
+      const hAntes = hp.x;
       hp.t += dt; hp.x = 260 - 520 * Math.min(1, hp.t / hp.dur);
+      if (hAntes > dp.x && hp.x <= dp.x) ob.passedAt = clock;   // o coração também conta para o tempo de segurança
       if (hp.t >= hp.dur) hp.show = false;
       const hb = { l: hp.x - 13, r: hp.x + 13, b: hp.y - 12, t: hp.y + 12 };
       if (overlap(dpBox(), hb)) {
-        hp.show = false; SFX.life();
+        hp.show = false; SFX.life(); ob.passedAt = clock;
         if (vidas < M().vidas) vidas++;
         hp.pop = 1; hp.popX = hp.x; hp.popY = hp.y;
       }
@@ -519,7 +525,7 @@ function render() {
         roundRect(x, -30, sel ? 122 : 112, sel ? 50 : 44, 12, md.cor, sel ? '#fff' : '#1a2438');
         text(md.nome.toUpperCase(), x, -30, sel ? 19 : 17, '#fff', { stroke: '#1a2438', strokeW: 4 });
       });
-      const d = ['5 vidas • mais devagar • 2 corações', '3 vidas • 1 coração por fase', '3 vidas • bem rápido!'][modo];
+      const d = ['3 vidas • rápido', '3 vidas • muito rápido', '2 vidas • super rápido!'][modo];
       text(d, 0, -72, 13, '#fff', { stroke: '#1a2438', strokeW: 4, weight: 700 });
     }
     text('Pular: espaço ou PULAR • Abaixar: ▼ • Correr: ◀ ▶', 0, -160, 12, '#fff', { stroke: '#1a2438', strokeW: 4, weight: 700 });
