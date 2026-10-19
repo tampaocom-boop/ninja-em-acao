@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1a2438">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ninja em Ação 3D">
+<title>Ninja em Ação 3D</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root { --ink:#1a2438; --gold:#ffd34a; --red:#e8453c; --bg:#0b0e22; }
+  [hidden] { display:none !important; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:#fff; overflow:hidden; touch-action:none;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #game { position:fixed; inset:0; overflow:hidden; background:#e8dfc4; }
+  html.flow, html.flow body { height:auto; overflow:visible; }
+  html.flow #game { position:relative; inset:auto; width:100%; border-radius:10px; }
+  canvas { display:block; width:100%; height:100%; }
+  .hud { position:absolute; top:calc(8px + env(safe-area-inset-top, 0px)); left:calc(10px + env(safe-area-inset-left, 0px)); right:calc(10px + env(safe-area-inset-right, 0px));
+    display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; gap:8px; }
+  .pill { background:rgba(10,14,34,.72); border-radius:12px; padding:6px 10px; font-weight:800; font-size:16px; line-height:1.2;
+    display:flex; align-items:center; gap:6px; font-variant-numeric:tabular-nums; }
+  .pill small { font-size:11px; opacity:.8; font-weight:700; }
+  .hearts img { width:22px; height:20px; }
+  #pause { pointer-events:auto; width:36px; height:36px; border-radius:50%; border:2px solid var(--ink); background:#fffd; font-size:16px; }
+  .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+    background:rgba(11,14,34,.55); text-align:center; padding:16px; }
+  .overlay[hidden] { display:none; }
+  .logo { width:min(78%, 360px); filter:drop-shadow(0 3px 0 #0008); }
+  .modes { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .modes button, .big { border:3px solid var(--ink); border-radius:14px; font-weight:900; font-size:17px; color:#fff; padding:10px 16px;
+    text-shadow:0 2px 0 #0007; box-shadow:0 4px 0 #0006; }
+  .modes button[aria-pressed="true"] { outline:3px solid #fff; outline-offset:2px; transform:translateY(-2px); }
+  .m0 { background:#2ea44f } .m1 { background:#d4a017 } .m2 { background:#d63a2f }
+  .big { background:#2f6fe0; font-size:22px; padding:12px 30px; }
+  .big.alt { background:#555c74; font-size:17px; padding:10px 20px; }
+  .hint { font-weight:700; font-size:14px; opacity:.95; text-shadow:0 2px 0 #000a; max-width:340px; }
+  .title { font-size:28px; font-weight:900; text-shadow:0 3px 0 #000a; margin:0; }
+  .score-big { font-size:40px; font-weight:900; color:var(--gold); text-shadow:0 3px 0 #000a; font-variant-numeric:tabular-nums; }
+  #banner { position:absolute; top:22%; left:50%; transform:translateX(-50%); width:min(80%, 360px); pointer-events:none; transition:opacity .4s; }
+  #tip { position:absolute; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); left:0; right:0; text-align:center; pointer-events:none; transition:opacity .5s; }
+  #tip span { background:rgba(10,14,34,.75); border-radius:12px; padding:8px 12px; font-weight:800; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c" aria-label="Jogo Ninja em Ação 3D"></canvas>
+  <div class="hud" id="hud" hidden>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="pill"><span id="score">0</span><small>pontos</small></div>
+      <div class="pill">📜 <span id="scrolls">0</span></div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <div class="pill hearts" id="hearts"></div>
+      <button id="pause" aria-label="Pausar">⏸</button>
+    </div>
+  </div>
+  <img id="banner" alt="" hidden>
+  <div id="tip" hidden><span>Deslize: ↑ pular • ↓ rolar • ← → trocar de pista</span></div>
+
+  <div class="overlay" id="menu">
+    <img class="logo" id="logo" alt="Ninja em Ação!">
+    <p class="title" style="font-size:20px">3D</p>
+    <div class="modes" role="group" aria-label="Modo">
+      <button class="m0" data-m="0">FÁCIL</button>
+      <button class="m1" data-m="1">MÉDIO</button>
+      <button class="m2" data-m="2">DIFÍCIL</button>
+    </div>
+    <div class="hint" id="modeinfo"></div>
+    <button class="big" id="play">JOGAR</button>
+    <div class="hint" id="best"></div>
+    <div class="hint" style="font-size:12px;opacity:.85">Celular: deslize o dedo • Computador: setas ou espaço</div>
+  </div>
+
+  <div class="overlay" id="paused" hidden>
+    <p class="title">Pausado</p>
+    <button class="big" id="resume">CONTINUAR</button>
+    <button class="big alt" id="toMenu1">MENU</button>
+  </div>
+
+  <div class="overlay" id="over" hidden>
+    <p class="title">O Mão Afiada te pegou!</p>
+    <div class="score-big" id="finalScore">0</div>
+    <div class="hint" id="finalInfo"></div>
+    <button class="big" id="again">JOGAR DE NOVO</button>
+    <button class="big alt" id="toMenu2">MENU</button>
+  </div>
+</div>
+<script src="assets.js"></script>
+<script type="module" src="game3d.js"></script>
+<script>if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});</script>
+</body>
+</html>
