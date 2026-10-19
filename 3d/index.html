@@ -45,6 +45,16 @@
   .title { font-size:28px; font-weight:900; text-shadow:0 3px 0 #000a; margin:0; }
   .score-big { font-size:40px; font-weight:900; color:var(--gold); text-shadow:0 3px 0 #000a; font-variant-numeric:tabular-nums; }
   #banner { position:absolute; top:22%; left:50%; transform:translateX(-50%); width:min(80%, 360px); pointer-events:none; transition:opacity .4s; }
+  #bannerText { position:absolute; top:22%; left:50%; transform:translateX(-50%); width:min(88%, 380px); text-align:center; pointer-events:none; transition:opacity .4s;
+    background:rgba(10,14,34,.85); border:3px solid var(--gold); border-radius:14px; padding:10px 12px; font-weight:900; font-size:18px; color:#fff; }
+  .phasepill { font-size:12px; color:var(--gold); }
+  #powerbox { position:absolute; top:calc(96px + env(safe-area-inset-top, 0px)); left:calc(10px + env(safe-area-inset-left, 0px)); width:150px; pointer-events:none; }
+  #powerbox .pill { flex-direction:column; align-items:stretch; gap:4px; font-size:13px; }
+  .bar { height:7px; background:#ffffff33; border-radius:4px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--gold); width:100%; transition:width .1s linear; }
+  #bossbar { position:absolute; top:calc(54px + env(safe-area-inset-top, 0px)); right:calc(10px + env(safe-area-inset-right, 0px)); width:min(48%, 190px); pointer-events:none; text-align:center; font-weight:900; font-size:12px; text-shadow:0 2px 0 #000a; }
+  #bossbar .bar { height:12px; border:2px solid #000; background:#3a1010; margin-top:3px; }
+  #bossbar .bar > div { background:linear-gradient(#ff6b5a, #c0392b); }
   #tip { position:absolute; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); left:0; right:0; text-align:center; pointer-events:none; transition:opacity .5s; }
   #tip span { background:rgba(10,14,34,.75); border-radius:12px; padding:8px 12px; font-weight:800; font-size:14px; }
 </style>
@@ -56,6 +66,7 @@
     <div style="display:flex;flex-direction:column;gap:6px">
       <div class="pill"><span id="score">0</span><small>pontos</small></div>
       <div class="pill">📜 <span id="scrolls">0</span></div>
+      <div class="pill phasepill" id="phase">Fase 1/5 • Escola</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <div class="pill hearts" id="hearts"></div>
@@ -63,6 +74,9 @@
     </div>
   </div>
   <img id="banner" alt="" hidden>
+  <div id="bannerText" hidden></div>
+  <div id="powerbox" hidden><div class="pill"><div><span id="powericon">🌀</span> <span id="powername">Poder</span></div><div class="bar"><div id="powerfill"></div></div></div></div>
+  <div id="bossbar" hidden>MÃO AFIADA<div class="bar"><div id="bossfill"></div></div></div>
   <div id="tip" hidden><span>Deslize: ↑ pular • ↓ rolar • ← → trocar de pista</span></div>
 
   <div class="overlay" id="menu">
@@ -77,12 +91,23 @@
     <button class="big" id="play">JOGAR</button>
     <div class="hint" id="best"></div>
     <div class="hint" style="font-size:12px;opacity:.85">Celular: deslize o dedo • Computador: setas ou espaço</div>
+    <div class="hint" style="font-size:12px;opacity:.85">5 fases + chefão • Poderes: 🌀 ímã • 🛡️ escudo • 👟 super pulo</div>
   </div>
 
   <div class="overlay" id="paused" hidden>
     <p class="title">Pausado</p>
     <button class="big" id="resume">CONTINUAR</button>
     <button class="big alt" id="toMenu1">MENU</button>
+  </div>
+
+  <div class="overlay" id="win" hidden>
+    <p class="title" style="font-size:34px;color:var(--gold)">PARABÉNS!</p>
+    <div class="hint" style="font-size:16px">Você derrotou o Mão Afiada e reencontrou seu amigo!</div>
+    <div class="score-big" id="winScore">0</div>
+    <div class="hint" id="winInfo"></div>
+    <button class="big" id="again2">JOGAR DE NOVO</button>
+    <button class="big alt" id="toMenu3">MENU</button>
+    <div class="hint" style="font-size:12px">Jogo 2 em breve!</div>
   </div>
 
   <div class="overlay" id="over" hidden>
