@@ -8,46 +8,185 @@ const $ = id => document.getElementById(id);
 const LANES = [-2.2, 0, 2.2];
 const PHASE_LEN = 420;          // distância de cada fase
 
+// ---------------- Plataforma (CrazyGames, opcional) e salvamento ----------------
+let CG = null, adsOn = false, cgMuted = false, adMuted = false, inGameplay = false;
+const Store = {
+  get(k) {
+    try { if (CG && CG.data) { const v = CG.data.getItem(k); if (v !== null && v !== undefined) return String(v); } } catch (e) {}
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+  },
+  set(k, v) {
+    v = String(v);
+    try { if (CG && CG.data) CG.data.setItem(k, v); } catch (e) {}
+    try { localStorage.setItem(k, v); } catch (e) {}
+  },
+};
+function cgCall(fn) { try { if (CG && CG.game && CG.game[fn]) CG.game[fn](); } catch (e) {} }
+function gameplayStart() { if (!inGameplay) { inGameplay = true; cgCall('gameplayStart'); } }
+function gameplayStop() { if (inGameplay) { inGameplay = false; cgCall('gameplayStop'); } }
+async function initPlatform() {
+  const sdk = window.CrazyGames && window.CrazyGames.SDK;
+  if (!sdk) return;
+  try { await sdk.init(); if (sdk.environment === 'disabled') return; CG = sdk; } catch (e) { return; }
+  adsOn = !!(CG.ad && CG.ad.requestAd);
+  try {
+    cgMuted = !!(CG.game.settings && CG.game.settings.muteAudio);
+    CG.game.addSettingsChangeListener(s => { cgMuted = !!(s && s.muteAudio); applyVolume(); updateMuteBtns(); });
+  } catch (e) {}
+}
+// Anúncio: bloqueia a tela até terminar. done(true) só quando o anúncio foi assistido.
+function showAd(type, done) {
+  if (!adsOn) { done(false); return; }
+  $('adwait').hidden = false; let fin = false;
+  const end = ok => { if (fin) return; fin = true; adMuted = false; applyVolume(); $('adwait').hidden = true; done(ok); };
+  try {
+    CG.ad.requestAd(type, { adStarted: () => { adMuted = true; applyVolume(); }, adFinished: () => end(true), adError: () => end(false) });
+  } catch (e) { end(false); }
+}
+
+// ---------------- Idiomas ----------------
+const STR = {
+  pt: {
+    points: 'pontos', play: 'JOGAR', easy: 'FÁCIL', medium: 'MÉDIO', hard: 'DIFÍCIL', subtitle: '3D',
+    ctrlHint: 'Celular: deslize o dedo • Computador: setas ou espaço',
+    powHint: '5 fases + chefão • Poderes: 🌀 ímã • 🛡️ escudo • 👟 super pulo',
+    paused: 'Pausado', resume: 'CONTINUAR', menu: 'MENU', congrats: 'PARABÉNS!',
+    winText: 'Você derrotou o Mão Afiada e reencontrou seu amigo!', again: 'JOGAR DE NOVO', soon: 'Experimente o modo ♾️ Infinito!',
+    overTitle: 'O Mão Afiada te pegou!', tip: 'Deslize: ↑ pular • ↓ rolar • ← → trocar de pista',
+    boss: 'MÃO AFIADA', bossBanner: 'CHEFÃO: Mão Afiada! Pegue as bombas 💣', bossHud: 'CHEFÃO!', phase: 'Fase',
+    record: 'Recorde', newRecord: '🏆 NOVO RECORDE!', scrollsW: 'pergaminhos',
+    recordIn: (m, b) => `🏆 Recorde no ${m}: ${b} pontos`,
+    shop: '🛒 LOJA', shopTitle: 'Loja do Dead Power', buy: 'Comprar', use: 'Usar', using: '✔ Usando', back: 'VOLTAR',
+    contAd: '📺 Continuar (anúncio)', contScroll: 'Continuar (30 📜)', noAd: 'Sem anúncio agora, tente mais tarde.',
+    oneChance: 'Uma chance de continuar por partida!', wait: 'Carregando anúncio…', bank: 'Seus pergaminhos',
+    missing: n => `Faltam ${n} 📜`, shopHint: 'Junte pergaminhos nas corridas para comprar roupas novas!',
+    lang: '🌐 English', free: 'Grátis', stage: (n, t) => `Fase ${n}: ${t}`,
+    endless: '♾️ INFINITO', endlessHud: t => `♾️ ${t}`, endlessBest: b => `♾️ Recorde no Infinito: ${b} pontos`, meters: 'm',
+    missions: '🎯 MISSÕES', missionsTitle: 'Missões', missionDone: (t, r) => `✅ ${t}  +${r} 📜`, missionsHint: 'Complete missões para ganhar pergaminhos!',
+    skip: 'Pular tutorial ⏭', tutLaneK: 'Desvie! Use ← →', tutLaneT: 'Desvie! Deslize para o lado', tutJumpK: 'Pule! Aperte ↑ ou Espaço', tutJumpT: 'Pule! Deslize para cima',
+    tutRollK: 'Role por baixo! Aperte ↓', tutRollT: 'Role por baixo! Deslize para baixo', tutScroll: 'Pegue os pergaminhos 📜', tutGo: 'Agora fuja do Mão Afiada!',
+    modes: [{ nome: 'Fácil', info: '3 vidas • começa rápido' }, { nome: 'Médio', info: '2 vidas • muito rápido' }, { nome: 'Difícil', info: '1 vida • super rápido!' }],
+    themes: ['Escola', 'Pátio', 'Telhados', 'Trem', 'Museu'],
+    powers: { ima: 'Ímã de pergaminhos', escudo: 'Escudo ninja', pulo: 'Super pulo' },
+    skins: { classico: 'Clássico', fogo: 'Fogo', floresta: 'Floresta', sombra: 'Sombra', dourado: 'Dourado', arcoiris: 'Arco-íris' },
+  },
+  en: {
+    points: 'points', play: 'PLAY', easy: 'EASY', medium: 'MEDIUM', hard: 'HARD', subtitle: 'Ninja in Action 3D',
+    ctrlHint: 'Phone: swipe • Computer: arrow keys or space',
+    powHint: '5 stages + boss • Powers: 🌀 magnet • 🛡️ shield • 👟 super jump',
+    paused: 'Paused', resume: 'RESUME', menu: 'MENU', congrats: 'YOU WIN!',
+    winText: 'You defeated Sharp Hand and found your friend!', again: 'PLAY AGAIN', soon: 'Try ♾️ Endless mode!',
+    overTitle: 'Sharp Hand got you!', tip: 'Swipe: ↑ jump • ↓ roll • ← → change lane',
+    boss: 'SHARP HAND', bossBanner: 'BOSS: Sharp Hand! Grab the bombs 💣', bossHud: 'BOSS!', phase: 'Stage',
+    record: 'Best', newRecord: '🏆 NEW RECORD!', scrollsW: 'scrolls',
+    recordIn: (m, b) => `🏆 Best on ${m}: ${b} points`,
+    shop: '🛒 SHOP', shopTitle: "Dead Power's Shop", buy: 'Buy', use: 'Use', using: '✔ Using', back: 'BACK',
+    contAd: '📺 Continue (ad)', contScroll: 'Continue (30 📜)', noAd: 'No ad right now, try again later.',
+    oneChance: 'One chance to continue per run!', wait: 'Loading ad…', bank: 'Your scrolls',
+    missing: n => `${n} 📜 missing`, shopHint: 'Collect scrolls while running to buy new outfits!',
+    lang: '🌐 Português', free: 'Free', stage: (n, t) => `Stage ${n}: ${t}`,
+    endless: '♾️ ENDLESS', endlessHud: t => `♾️ ${t}`, endlessBest: b => `♾️ Endless best: ${b} points`, meters: 'm',
+    missions: '🎯 MISSIONS', missionsTitle: 'Missions', missionDone: (t, r) => `✅ ${t}  +${r} 📜`, missionsHint: 'Complete missions to earn scrolls!',
+    skip: 'Skip tutorial ⏭', tutLaneK: 'Dodge! Use ← →', tutLaneT: 'Dodge! Swipe sideways', tutJumpK: 'Jump! Press ↑ or Space', tutJumpT: 'Jump! Swipe up',
+    tutRollK: 'Roll under! Press ↓', tutRollT: 'Roll under! Swipe down', tutScroll: 'Grab the scrolls 📜', tutGo: 'Now run from Sharp Hand!',
+    modes: [{ nome: 'Easy', info: '3 lives • starts fast' }, { nome: 'Medium', info: '2 lives • very fast' }, { nome: 'Hard', info: '1 life • super fast!' }],
+    themes: ['School', 'Playground', 'Rooftops', 'Train', 'Museum'],
+    powers: { ima: 'Scroll magnet', escudo: 'Ninja shield', pulo: 'Super jump' },
+    skins: { classico: 'Classic', fogo: 'Fire', floresta: 'Forest', sombra: 'Shadow', dourado: 'Golden', arcoiris: 'Rainbow' },
+  },
+};
+let lang = (navigator.language || 'pt').toLowerCase().startsWith('pt') ? 'pt' : 'en';
+const L = () => STR[lang];
+function applyLang() {
+  document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => { const v = L()[el.dataset.i18n]; if (typeof v === 'string') el.textContent = v; });
+  if (typeof refreshMenu === 'function' && state !== 'loading') refreshMenu();
+  if (typeof updatePhaseHud === 'function') updatePhaseHud();
+}
+
+const MTXT = {
+  pt: { runScrolls: n => `Pegue ${n} 📜 numa corrida`, jumps: n => `Pule ${n} vezes`, rolls: n => `Role ${n} vezes`, powers: n => `Pegue ${n} poderes`,
+        reachPhase: n => `Chegue na fase ${n}`, boss: () => 'Derrote o Mão Afiada', endlessDist: n => `Corra ${n} m no Infinito`, runs: n => `Jogue ${n} partidas`, lanes: n => `Troque de pista ${n} vezes` },
+  en: { runScrolls: n => `Grab ${n} 📜 in one run`, jumps: n => `Jump ${n} times`, rolls: n => `Roll ${n} times`, powers: n => `Grab ${n} powers`,
+        reachPhase: n => `Reach stage ${n}`, boss: () => 'Defeat Sharp Hand', endlessDist: n => `Run ${n} m in Endless`, runs: n => `Play ${n} runs`, lanes: n => `Change lanes ${n} times` },
+};
 // ---------------- Modos ----------------
 const MODES = [
-  { nome: 'Fácil',   vidas: 3, vel0: 12, velMax: 24, acel: 0.20, ataque: 1.7, info: '3 vidas • começa rápido' },
-  { nome: 'Médio',   vidas: 2, vel0: 15, velMax: 30, acel: 0.28, ataque: 1.35, info: '2 vidas • muito rápido' },
-  { nome: 'Difícil', vidas: 1, vel0: 18, velMax: 36, acel: 0.36, ataque: 1.05, info: '1 vida • super rápido!' },
+  { vidas: 3, vel0: 12, velMax: 24, acel: 0.20, ataque: 1.7 },
+  { vidas: 2, vel0: 15, velMax: 30, acel: 0.28, ataque: 1.35 },
+  { vidas: 1, vel0: 18, velMax: 36, acel: 0.36, ataque: 1.05 },
 ];
 let modo = 1;
-try { const g = localStorage.getItem('ninja3d-modo'); if (g === '0' || g === '1' || g === '2') modo = +g; } catch (e) {}
 const M = () => MODES[modo];
-const bestKey = () => 'ninja3d-recorde-' + modo;
-function getBest() { try { return +(localStorage.getItem(bestKey()) || 0); } catch (e) { return 0; } }
-function setBest(v) { try { localStorage.setItem(bestKey(), String(v)); } catch (e) {} }
+const modeName = () => L().modes[modo].nome;
+const bestKey = () => runType === 'endless' ? 'ninja3d-recorde-inf-' + modo : 'ninja3d-recorde-' + modo;
+function getBest() { return +(Store.get(bestKey()) || 0); }
+function setBest(v) { Store.set(bestKey(), v); }
+
+// ---------------- Pergaminhos guardados e roupas ----------------
+const SKINS = [
+  { id: 'classico', price: 0,   sw: '#3D558F' },
+  { id: 'fogo',     price: 50,  sw: '#d63a2f', suit: { h: 0.0, sm: 1.2, lm: 1.15 }, acc: { h: 0.13, sm: 1, lm: 1.1 } },
+  { id: 'floresta', price: 100, sw: '#2e8b3e', suit: { h: 0.36, sm: 1.1, lm: 1.05 } },
+  { id: 'sombra',   price: 150, sw: '#6b3fa0', suit: { h: 0.76, sm: 1.1, lm: 1.0 }, acc: { h: 0.48, sm: 1, lm: 1 } },
+  { id: 'dourado',  price: 300, sw: '#e0b02a', suit: { h: 0.125, s: 0.92, lm: 1.15, la: 0.2 }, acc: { h: 0, s: 0, l: 0.95 } },
+  { id: 'arcoiris', price: 500, sw: 'linear-gradient(135deg,#e74c3c,#f1c40f,#2ecc71,#3498db,#9b59b6)', rainbow: true },
+];
+let bank = 0, owned = ['classico'], skin = 'classico', bankedThisRun = 0;
+function loadSave() {
+  const g = Store.get('ninja3d-modo'); if (g === '0' || g === '1' || g === '2') modo = +g;
+  const lg = Store.get('ninja3d-idioma');
+  if (lg === 'pt' || lg === 'en') lang = lg;
+  else { let loc = ''; try { loc = (CG && CG.user && CG.user.systemInfo && CG.user.systemInfo.locale) || ''; } catch (e) {} if (!loc) loc = navigator.language || 'en'; lang = String(loc).toLowerCase().startsWith('pt') ? 'pt' : 'en'; }
+  try { missionsState = JSON.parse(Store.get('ninja3d-missoes') || 'null'); } catch (e) { missionsState = null; }
+  tutorialDone = Store.get('ninja3d-tutorial') === '1';
+  bank = Math.max(0, +(Store.get('ninja3d-banco') || 0) || 0);
+  try { const o = JSON.parse(Store.get('ninja3d-roupas') || '[]'); if (Array.isArray(o)) owned = [...new Set(['classico', ...o.filter(x => SKINS.some(s => s.id === x))])]; } catch (e) {}
+  const s = Store.get('ninja3d-roupa'); if (s && owned.includes(s)) skin = s;
+  muted = Store.get('ninja3d-som') === '0';
+}
+function saveBank() { Store.set('ninja3d-banco', bank); }
+function bankRun() { bank += scrolls - bankedThisRun; bankedThisRun = scrolls; saveBank(); }
 
 // ---------------- Som (feito no aparelho) ----------------
-let AC = null, master = null, muted = false;
+let AC = null, master = null, sfxBus = null, musicBus = null, muted = false, noiseBuf = null;
+const isMuted = () => muted || cgMuted || adMuted;
+function applyVolume() { if (master) master.gain.value = isMuted() ? 0 : 0.6; }
 function audio() {
-  if (!AC) { const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; AC = new A(); master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination); }
+  if (!AC) {
+    const A = window.AudioContext || window.webkitAudioContext; if (!A) return null; AC = new A();
+    const comp = AC.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4; comp.connect(AC.destination);
+    master = AC.createGain(); master.connect(comp); sfxBus = AC.createGain(); sfxBus.gain.value = 0.8; sfxBus.connect(master);
+    musicBus = AC.createGain(); musicBus.gain.value = 0.32; musicBus.connect(master); applyVolume();
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.4, AC.sampleRate); const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
   if (AC.state === 'suspended') AC.resume();
   return AC;
 }
+function updateMuteBtns() { document.querySelectorAll('.mutebtn').forEach(b => { b.textContent = (muted || cgMuted) ? '🔇' : '🔊'; }); }
+function toggleMute() { muted = !muted; Store.set('ninja3d-som', muted ? '0' : '1'); audio(); applyVolume(); updateMuteBtns(); }
 function tone(f, dur, type = 'square', vol = 0.12, when = 0, slide = null) {
-  const a = audio(); if (!a || muted) return; const t = a.currentTime + when;
+  const a = audio(); if (!a || isMuted()) return; const t = a.currentTime + when;
   const o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(f, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + dur + 0.02);
 }
 function noise(dur, vol = 0.3) {
-  const a = audio(); if (!a || muted) return;
-  const n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
+  const a = audio(); if (!a || isMuted()) return;
+  const n =Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(); f.type = 'lowpass'; f.frequency.value = 900; g.gain.value = vol;
-  s.buffer = b; s.connect(f); f.connect(g); g.connect(master); s.start();
+  s.buffer = b; s.connect(f); f.connect(g); g.connect(sfxBus); s.start();
 }
 const SFX = {
   jump: () => tone(320, 0.16, 'square', 0.1, 0, 760),
   bigJump: () => tone(260, 0.3, 'square', 0.1, 0, 1200),
   roll: () => tone(500, 0.18, 'triangle', 0.12, 0, 160),
   lane: () => tone(700, 0.05, 'sine', 0.06),
-  scroll: () => { tone(988, 0.07, 'square', 0.07); tone(1319, 0.09, 'square', 0.07, 0.05); },
+  scroll: () => { const k = Math.pow(2, Math.min(scrollStreak, 12) / 12); tone(988 * k, 0.06, 'square', 0.055); tone(1319 * k, 0.08, 'square', 0.055, 0.04); },
+  mission: () => [784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.14, 'triangle', 0.12, i * 0.08)),
+  land: () => noise(0.06, 0.12),
   life: () => [784, 988, 1319].forEach((f, i) => tone(f, 0.12, 'sine', 0.14, i * 0.07)),
   power: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.1, 'square', 0.09, i * 0.05)),
   shield: () => { tone(400, 0.3, 'sine', 0.15, 0, 900); noise(0.1, 0.15); },
@@ -58,22 +197,52 @@ const SFX = {
   over: () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, 'triangle', 0.16, i * 0.18)),
   win: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'square', 0.1, i * 0.13)),
 };
-const SONGS = [
-  [330, 392, 494, 392, 349, 440, 523, 440, 330, 392, 494, 587, 523, 494, 440, 392],
-  [392, 440, 494, 587, 494, 440, 392, 330, 392, 440, 494, 659, 587, 494, 440, 392],
-  [220, 262, 330, 262, 247, 294, 370, 294, 220, 262, 330, 392, 370, 330, 294, 262],
-  [330, 330, 392, 330, 440, 392, 330, 294, 330, 392, 440, 523, 494, 440, 392, 330],
-  [196, 233, 294, 233, 185, 220, 277, 220, 196, 233, 294, 349, 330, 294, 277, 233],
-  [147, 175, 220, 175, 147, 175, 233, 220, 147, 175, 220, 262, 247, 220, 175, 165],
+// Música: sequenciador com bateria, baixo e melodia (agendado no relógio do áudio, não depende da taxa de quadros)
+const NOTE = n => 440 * Math.pow(2, (n - 69) / 12);
+const SONGS = [ // root MIDI, escala, progressão (graus), bpm
+  { root: 57, sc: [0, 2, 4, 5, 7, 9, 11], prog: [0, 5, 3, 4], bpm: 132 },  // Escola: alegre
+  { root: 60, sc: [0, 2, 4, 5, 7, 9, 11], prog: [0, 3, 4, 3], bpm: 138 },  // Pátio
+  { root: 55, sc: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 6, 4], bpm: 140 },  // Telhados (noite, menor)
+  { root: 59, sc: [0, 2, 4, 5, 7, 9, 11], prog: [0, 4, 5, 3], bpm: 146 },  // Trem
+  { root: 52, sc: [0, 2, 3, 5, 7, 8, 10], prog: [0, 3, 5, 4], bpm: 136 },  // Museu (misterioso)
+  { root: 50, sc: [0, 1, 3, 5, 7, 8, 10], prog: [0, 1, 0, 6], bpm: 156 },  // Chefão
 ];
-let songStep = 0, songT = 0;
-function music(dt) {
-  if (!AC || muted || state !== 'play') return;
-  songT -= dt; if (songT > 0) return;
-  const s = SONGS[Math.min(phase, 5)];
-  const f = s[songStep % s.length]; tone(f, 0.14, 'triangle', 0.05); if (songStep % 2 === 0) tone(f / 2, 0.16, 'square', 0.025);
-  songStep++; songT = Math.max(0.12, 0.2 - speed * 0.002);
+const MEL = [0, 2, 4, 2, 7, 4, 2, 4, 0, 4, 7, 9, 7, 4, 2, 1]; // contorno da melodia (graus relativos ao acorde)
+let musicOn = false, mStep = 0, mNext = 0, mSong = -1, mTimer = null;
+function deg(song, d, oct = 0) { const sc = song.sc, n = sc.length; const o = Math.floor(d / n); return song.root + sc[((d % n) + n) % n] + 12 * (o + oct); }
+function drum(kind, t, v = 1) {
+  if (kind === 'k') { const o = AC.createOscillator(), g = AC.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    g.gain.setValueAtTime(0.9 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16); o.connect(g); g.connect(musicBus); o.start(t); o.stop(t + 0.18); return; }
+  const src = AC.createBufferSource(); src.buffer = noiseBuf; const f = AC.createBiquadFilter(), g = AC.createGain();
+  if (kind === 's') { f.type = 'bandpass'; f.frequency.value = 1900; g.gain.setValueAtTime(0.45 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); }
+  else { f.type = 'highpass'; f.frequency.value = 7000; g.gain.setValueAtTime(0.16 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.04); }
+  src.connect(f); f.connect(g); g.connect(musicBus); src.start(t); src.stop(t + 0.2);
 }
+function synth(type, f, t, dur, vol, cut) {
+  const o = AC.createOscillator(), fl = AC.createBiquadFilter(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f, t);
+  fl.type = 'lowpass'; fl.frequency.value = cut; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(fl); fl.connect(g); g.connect(musicBus); o.start(t); o.stop(t + dur + 0.02);
+}
+function playStep(song, st, t) {
+  const bar = Math.floor(st / 16) % 4, s16 = st % 16, ch = song.prog[bar], calm = state === 'menu';
+  if (!calm) {
+    if (s16 % 4 === 0) drum('k', t);
+    if (s16 === 4 || s16 === 12) drum('s', t);
+    if (s16 % 2 === 1) drum('h', t, s16 % 4 === 3 ? 1 : 0.6);
+  } else if (s16 === 0 || s16 === 8) drum('k', t, 0.5);
+  if (s16 % 2 === 0) synth('sawtooth', NOTE(deg(song, ch, -2) + (s16 % 4 === 2 ? 12 : 0)), t, 0.16, calm ? 0.14 : 0.2, 700);
+  if ([0, 3, 6, 8, 10, 12, 14].includes(s16)) synth('square', NOTE(deg(song, ch + MEL[(s16 + bar * 4) % 16], 0)), t, s16 === 14 ? 0.3 : 0.15, calm ? 0.05 : 0.075, 2600);
+  if (s16 === 0) [0, 2, 4].forEach(k => synth('triangle', NOTE(deg(song, ch + k, -1)), t, 1.6, 0.04, 1800));
+}
+function musicTick() {
+  if (!AC || !musicOn) return;
+  const idx = state === 'menu' ? 0 : Math.min(phase, 5), song = SONGS[idx];
+  if (idx !== mSong) { mSong = idx; mStep = 0; mNext = Math.max(mNext, AC.currentTime + 0.05); }
+  const stepDur = 60 / song.bpm / 4;
+  while (mNext < AC.currentTime + 0.15) { if (!isMuted()) playStep(song, mStep, mNext); mStep++; mNext += stepDur; }
+}
+function setMusic(on) { musicOn = on; if (on && AC) { mNext = Math.max(mNext, AC.currentTime + 0.05); if (!mTimer) mTimer = setInterval(musicTick, 25); } }
+function music() { setMusic(!!AC && (state === 'play' || state === 'menu')); }
 
 // ---------------- Cena ----------------
 const canvas = $('c');
@@ -100,7 +269,7 @@ function resize() {
   const w = box.clientWidth || 360, h = box.clientHeight || 640;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.fov = w / h < 0.8 ? 70 : 60;
+  camera.fov = w / h < 0.8 ? 70 : 60;  // o laço ajusta um pouco com a velocidade
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -150,8 +319,46 @@ async function voxel(name, cols, height, depth, centerY = false) {
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
   g.add(new THREE.Mesh(geo, voxelMat));
-  g.userData = { w: cols * size, h: rows * size, d: depth * size };
+  g.userData = { w: cols * size, h: rows * size, d: depth * size, geo, base: Float32Array.from(colr) };
   return g;
+}
+
+// Pinta a roupa do Dead Power: troca a cor do macacão azul (e do detalhe vermelho)
+const _c = new THREE.Color(), _hsl = { h: 0, s: 0, l: 0 };
+const clamp01 = v => Math.max(0, Math.min(1, v));
+function skinClasses(g) {
+  if (g.userData.cls) return g.userData.cls;
+  const b = g.userData.base, cls = new Uint8Array(b.length / 3);
+  for (let i = 0; i < cls.length; i++) {
+    _c.setRGB(b[i * 3], b[i * 3 + 1], b[i * 3 + 2]); _c.getHSL(_hsl, THREE.SRGBColorSpace);
+    const hd = _hsl.h * 360;
+    if (hd >= 195 && hd <= 250 && _hsl.s > 0.2) cls[i] = 1;
+    else if ((hd < 20 || hd > 340) && _hsl.s > 0.5 && _hsl.l > 0.35) cls[i] = 2;
+  }
+  return (g.userData.cls = cls);
+}
+function recolor(g, def, t = 0) {
+  if (!g || !g.userData.base) return;
+  const b = g.userData.base, attr = g.userData.geo.getAttribute('color'), a = attr.array, cls = skinClasses(g);
+  const rule = (k, h) => { if (h) return h; return null; };
+  for (let i = 0; i < cls.length; i++) {
+    let r = null;
+    if (def && def.rainbow && cls[i]) r = { h: (t * 0.12 + (cls[i] === 2 ? 0.5 : 0) + i * 0.00002) % 1, sm: 1.4, lm: 1.4 };
+    else if (def && cls[i] === 1) r = rule(1, def.suit);
+    else if (def && cls[i] === 2) r = rule(2, def.acc);
+    if (!r) { a[i * 3] = b[i * 3]; a[i * 3 + 1] = b[i * 3 + 1]; a[i * 3 + 2] = b[i * 3 + 2]; continue; }
+    _c.setRGB(b[i * 3], b[i * 3 + 1], b[i * 3 + 2]); _c.getHSL(_hsl, THREE.SRGBColorSpace);
+    const s = r.s !== undefined ? r.s : clamp01(_hsl.s * (r.sm || 1)), l = r.l !== undefined ? r.l * (0.7 + _hsl.l) : clamp01(_hsl.l * (r.lm || 1) + (r.la || 0));
+    _c.setHSL(r.h, s, clamp01(l), THREE.SRGBColorSpace);
+    a[i * 3] = _c.r; a[i * 3 + 1] = _c.g; a[i * 3 + 2] = _c.b;
+  }
+  attr.needsUpdate = true;
+}
+function applySkin() { const def = SKINS.find(s => s.id === skin) || SKINS[0]; recolor(dpRun, def.id === 'classico' ? null : def, time); recolor(dpJump, def.id === 'classico' ? null : def, time); }
+let rainbowT = 0;
+function updateRainbow(dt) {
+  if (skin !== 'arcoiris') return; rainbowT -= dt; if (rainbowT > 0) return; rainbowT = 0.08;
+  const def = SKINS.find(s => s.id === 'arcoiris'); recolor(dpRun && dpRun.visible ? dpRun : dpJump, def, time);
 }
 
 // ---------------- Texturas (desenhadas no aparelho) ----------------
@@ -399,7 +606,10 @@ const P = { lane: 1, x: 0, y: 0, vy: 0, roll: 0, z: 0 };
 const power = { name: null, t: 0 }; let shield = false;
 const boss = { hp: 3, t: 0, bombT: 0, x: 0, phaseOut: 0, hitFlash: 0, warn: null };
 const POWER_TIME = 10;
-const POWER_INFO = { ima: ['🌀', 'Ímã de pergaminhos'], escudo: ['🛡️', 'Escudo ninja'], pulo: ['👟', 'Super pulo'] };
+const POWER_ICON = { ima: '🌀', escudo: '🛡️', pulo: '👟' };
+let continued = false, offeredAd = false;
+let runType = 'story', nextPhaseAt = PHASE_LEN, lap = 0, timeScale = 1, timeTarget = 1, scrollStreak = 0, streakT = 0, shake = 0;
+let tut = null, tutorialDone = false, missionsState = null, runStats = null, wasAir = false, touchUsed = false;
 
 function updateHearts() {
   const h = $('hearts'); h.innerHTML = '';
@@ -416,33 +626,43 @@ function showBanner(imgName, text) {
   showBanner.t2 = setTimeout(() => { b.hidden = true; t.hidden = true; }, 2500);
 }
 function updatePhaseHud() {
-  $('phase').textContent = phase < 5 ? `Fase ${phase + 1}/5 • ${THEMES[phase].nome}` : 'CHEFÃO!';
+  $('phase').textContent = runType === 'endless' ? L().endlessHud(L().themes[phase]) : phase < 5 ? `${L().phase} ${phase + 1}/5 • ${L().themes[phase]}` : L().bossHud;
+}
+function phaseBanner(i) {
+  if (lang === 'pt') showBanner(THEMES[i].banner); else showBanner(null, L().stage(i + 1, L().themes[i]));
 }
 
-function startGame(startPhase = 0) {
-  audio(); clearItems();
-  speed = M().vel0; dist = startPhase * PHASE_LEN; scrolls = 0; bonus = 0; lives = M().vidas; inv = 0; chaserT = 0; time = 0; rowCount = 0;
+function startGame(startPhase = 0, opts = {}) {
+  audio(); clearItems(); runType = opts.endless ? 'endless' : 'story'; lap = 0; nextPhaseAt = (Math.min(startPhase, 4) + 1) * PHASE_LEN;
+  timeScale = timeTarget = 1; scrollStreak = 0; shake = 0; wasAir = false; hideTut();
+  runStats = { scrolls: 0, jumps: 0, rolls: 0, powers: 0, lanes: 0, maxPhase: Math.min(startPhase, 4) + 1 };
+  speed = M().vel0; dist = startPhase * PHASE_LEN; scrolls = 0; bankedThisRun = 0; continued = false; offeredAd = false; bonus = 0; lives = M().vidas; inv = 0; chaserT = 0; time = 0; rowCount = 0;
   phase = Math.min(startPhase, 4); power.name = null; power.t = 0; shield = false; bubble.visible = false; $('powerbox').hidden = true;
   Object.assign(P, { lane: 1, x: 0, y: 0, vy: 0, roll: 0, z: 0 });
   Object.assign(boss, { hp: 3, t: 0, bombT: 0, x: 0, phaseOut: 0, hitFlash: 0 });
   chaser.rotation.set(0, 0, 0); chaser.scale.setScalar(1); chaser.visible = true; friend.visible = true;
+  chaser.position.set(0, 0, 9);  // começa atrás do ninja (não passa na frente da câmera)
   applyTheme(phase);
-  nextRowZ = -28; while (nextRowZ > -110) { genRow(nextRowZ); nextRowZ -= rowGap(); }
+  tut = opts.tutorial ? { step: 0, waiting: false, rowsBuilt: false, endZ: 0, msgT: 0 } : null;
+  if (tut) buildTutorial(); else { nextRowZ = -28; while (nextRowZ > -110) { genRow(nextRowZ); nextRowZ -= rowGap(); } }
+  $('skipTut').hidden = !tut;
   for (const id of ['menu', 'over', 'paused', 'win']) $(id).hidden = true;
   $('hud').hidden = false;
   updateHearts(); $('scrolls').textContent = '0'; updatePhaseHud();
-  showBanner(THEMES[phase].banner);
-  if (startPhase === 0) { const t = $('tip'); t.hidden = false; t.style.opacity = 1; setTimeout(() => { t.style.opacity = 0; }, 4500); setTimeout(() => { t.hidden = true; }, 5000); }
+  phaseBanner(phase);
+  if (startPhase === 0 && !tut) { const t = $('tip'); t.hidden = false; t.style.opacity = 1; setTimeout(() => { t.style.opacity = 0; }, 4500); setTimeout(() => { t.hidden = true; }, 5000); }
   stopConfetti();
   if (startPhase >= 5) startBoss();
-  state = 'play';
+  state = 'play'; gameplayStart(); music(); mission('runs', 1);
 }
 function rowGap() { return Math.max(11, speed * 0.85) + Math.random() * 6; }
 
 function nextPhase() {
-  phase++; bonus += 100; SFX.phase();
+  bonus += 100; SFX.phase(); nextPhaseAt += PHASE_LEN;
+  if (runType === 'endless') { phase = (phase + 1) % 5; if (phase === 0) lap++; applyTheme(phase); updatePhaseHud(); phaseBanner(phase); return; }
+  phase++; runStats.maxPhase = Math.max(runStats.maxPhase, phase + 1); mission('reachPhase', Math.min(phase + 1, 5));
   if (phase >= 5) { startBoss(); return; }
-  applyTheme(phase); updatePhaseHud(); showBanner(THEMES[phase].banner);
+  applyTheme(phase); updatePhaseHud(); phaseBanner(phase);
 }
 
 // ---------------- Chefão ----------------
@@ -451,7 +671,7 @@ function startBoss() {
   // limpa obstáculos que ainda estão à frente
   for (const it of items) if (it.z < P.z - 2 && it.kind !== 'scroll') { it.alive = false; scene.remove(it.obj); }
   Object.assign(boss, { hp: 3, t: 2.2, bombT: 3.5, x: 0, phaseOut: 0, hitFlash: 0 });
-  showBanner(null, 'CHEFÃO: Mão Afiada! Pegue as bombas 💣');
+  showBanner(null, L().bossBanner);
   $('bossbar').hidden = false; updateBossBar();
   friend.visible = false;
 }
@@ -471,18 +691,33 @@ function bossHit() {
   if (boss.hp <= 0) { boss.phaseOut = 0.001; $('bossbar').hidden = true; if (boss.warn) { scene.remove(boss.warn.mesh); boss.warn = null; } for (const it of items) if (it.kind === 'knife' || it.kind === 'bomb') { it.alive = false; scene.remove(it.obj); } }
 }
 
+function endInfo(novo, best, s, withPhase) {
+  return (novo ? L().newRecord + ' • ' : L().record + ': ' + Math.max(best, s) + ' • ') + scrolls + ' ' + L().scrollsW + ' • ' +
+    (runType === 'endless' ? Math.floor(dist) + ' ' + L().meters + ' • ' : withPhase ? (phase < 5 ? L().phase + ' ' + (phase + 1) : L().bossHud) + ' • ' : '') + modeName();
+}
 function gameOver() {
-  state = 'over'; SFX.over(); $('bossbar').hidden = true;
+  state = 'over'; SFX.over(); $('bossbar').hidden = true; gameplayStop(); hideTut(); endRunMissions(); bankRun(); music();
   const s = score(), best = getBest(), novo = s > best; if (novo) setBest(s);
-  $('finalScore').textContent = s + ' pontos';
-  $('finalInfo').textContent = (novo ? '🏆 NOVO RECORDE! • ' : 'Recorde: ' + Math.max(best, s) + ' • ') + scrolls + ' pergaminhos • ' + (phase < 5 ? 'Fase ' + (phase + 1) : 'Chefão') + ' • ' + M().nome;
+  $('finalScore').textContent = s + ' ' + L().points;
+  $('finalInfo').textContent = endInfo(novo, best, s, true);
+  const can = !continued && !tut && (dist >= PHASE_LEN || phase === 5);
+  $('contAd').hidden = !(can && adsOn); $('contScroll').hidden = !(can && bank >= 30);
+  offeredAd = !$('contAd').hidden; $('overMsg').textContent = can && (adsOn || bank >= 30) ? L().oneChance : '';
   setTimeout(() => { if (state === 'over') { $('over').hidden = false; $('hud').hidden = true; } }, 900);
 }
+function doContinue() {
+  if (state !== 'over' || continued) return;
+  continued = true; lives = 1; updateHearts(); inv = 2.5; chaserT = 0;
+  for (const it of items) if (it.alive && it.kind !== 'scroll' && it.z > P.z - 25 && it.z < P.z + 8) { it.alive = false; scene.remove(it.obj); }
+  if (boss.warn) { scene.remove(boss.warn.mesh); boss.warn = null; boss.t = 1.5; }
+  $('over').hidden = true; $('hud').hidden = false; if (phase === 5 && boss.hp > 0) $('bossbar').hidden = false;
+  SFX.life(); state = 'play'; last = performance.now(); gameplayStart(); music();
+}
 function victory() {
-  state = 'win'; bonus += 1000; SFX.win();
+  state = 'win'; bonus += 1000; SFX.win(); gameplayStop(); mission('boss', 1); endRunMissions(); bankRun(); music(); cgCall('happytime');
   const s = score(), best = getBest(), novo = s > best; if (novo) setBest(s);
-  $('winScore').textContent = s + ' pontos';
-  $('winInfo').textContent = (novo ? '🏆 NOVO RECORDE! • ' : 'Recorde: ' + Math.max(best, s) + ' • ') + scrolls + ' pergaminhos • ' + M().nome;
+  $('winScore').textContent = s + ' ' + L().points;
+  $('winInfo').textContent = endInfo(novo, best, s, false);
   friend.visible = true; startConfetti();
   setTimeout(() => { if (state === 'win') { $('win').hidden = false; $('hud').hidden = true; } }, 1500);
 }
@@ -514,22 +749,25 @@ function updateConfetti(dt) {
 function act(a) {
   audio();
   if (state !== 'play') return;
-  if (a === 'left' && P.lane > 0) { P.lane--; SFX.lane(); }
-  if (a === 'right' && P.lane < 2) { P.lane++; SFX.lane(); }
-  if (a === 'jump' && P.y <= 0.001 && P.roll <= 0) { const big = power.name === 'pulo'; P.vy = big ? 13.5 : 9.6; big ? SFX.bigJump() : SFX.jump(); }
-  if (a === 'roll') { P.roll = 0.62; if (P.y > 0) P.vy = -16; SFX.roll(); }
+  let did = false;
+  if (a === 'left' && P.lane > 0) { P.lane--; SFX.lane(); did = true; mission('lanes', 1); }
+  if (a === 'right' && P.lane < 2) { P.lane++; SFX.lane(); did = true; mission('lanes', 1); }
+  if (a === 'jump' && P.y <= 0.001 && P.roll <= 0) { const big = power.name === 'pulo'; P.vy = big ? 13.5 : 9.6; big ? SFX.bigJump() : SFX.jump(); did = true; mission('jumps', 1); burst(tmp.set(P.x, 0.1, P.z), 0xcfc6b0, 6, 2.5, 1.5, 0.1, 0.35); }
+  if (a === 'roll') { P.roll = 0.62; if (P.y > 0) P.vy = -16; SFX.roll(); did = true; mission('rolls', 1); }
+  if (did && tut && tut.waiting) tutAction(a);
 }
 const KEYS = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'jump', KeyW: 'jump', Space: 'jump', ArrowDown: 'roll', KeyS: 'roll' };
 window.addEventListener('keydown', e => {
   const a = KEYS[e.code];
-  if (e.code === 'Escape' || e.code === 'KeyP') { togglePause(); return; }
-  if (!a) { if (e.code === 'Enter' && state === 'menu') startGame(); return; }
+  if (e.code === 'KeyP') { togglePause(); return; }  // Esc fica livre: no CrazyGames ele sai da tela cheia
+  const menuReady = state === 'menu' && $('shop').hidden && $('missionsPanel').hidden && $('adwait').hidden;
+  if (!a) { if (e.code === 'Enter' && menuReady) startGame(0, { tutorial: !tutorialDone }); return; }
   e.preventDefault(); if (!e.repeat) act(a);
-  if (state === 'menu' && a === 'jump') startGame();
+  if (menuReady && a === 'jump') startGame(0, { tutorial: !tutorialDone });
 });
 let sx = 0, sy = 0, swiping = false;
 const area = $('game');
-area.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; audio(); sx = e.clientX; sy = e.clientY; swiping = true; });
+area.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') touchUsed = true; if (e.target.closest('button')) return; audio(); music(); sx = e.clientX; sy = e.clientY; swiping = true; });
 area.addEventListener('pointermove', e => {
   if (!swiping) return; const dx = e.clientX - sx, dy = e.clientY - sy;
   if (Math.max(Math.abs(dx), Math.abs(dy)) < 28) return;
@@ -541,27 +779,67 @@ area.addEventListener('pointercancel', () => { swiping = false; });
 document.addEventListener('touchmove', e => { if (state === 'play') e.preventDefault(); }, { passive: false });
 
 function togglePause() {
-  if (state === 'play') { state = 'paused'; $('paused').hidden = false; }
-  else if (state === 'paused') { state = 'play'; $('paused').hidden = true; last = performance.now(); }
+  if (state === 'play') { state = 'paused'; $('paused').hidden = false; gameplayStop(); music(); }
+  else if (state === 'paused') { state = 'play'; $('paused').hidden = true; last = performance.now(); gameplayStart(); music(); }
 }
 $('pause').addEventListener('click', togglePause);
 $('resume').addEventListener('click', togglePause);
 function toMenu() {
-  state = 'menu'; clearItems(); for (const p of projectiles) scene.remove(p.obj); projectiles.length = 0;
-  for (const id of ['over', 'paused', 'win', 'hud', 'bossbar']) $(id).hidden = true; $('menu').hidden = false;
-  stopConfetti(); applyTheme(0); phase = 0; chaser.rotation.set(0, 0, 0); chaser.visible = true; friend.visible = true; refreshMenu();
+  state = 'menu'; gameplayStop(); clearItems(); for (const p of projectiles) scene.remove(p.obj); projectiles.length = 0;
+  for (const id of ['over', 'paused', 'win', 'hud', 'bossbar', 'shop', 'missionsPanel']) $(id).hidden = true; $('menu').hidden = false;
+  stopConfetti(); applyTheme(0); phase = 0; runType = 'story'; hideTut(); chaserT = 0; inv = 0; chaser.position.set(P.x, 0, P.z + 9); chaser.rotation.set(0, 0, 0); chaser.visible = true; friend.visible = true; refreshMenu(); music();
 }
 for (const id of ['toMenu1', 'toMenu2', 'toMenu3']) $(id).addEventListener('click', toMenu);
-$('again').addEventListener('click', () => startGame());
-$('again2').addEventListener('click', () => startGame());
-$('play').addEventListener('click', () => startGame());
+// "Jogar de novo": pausa natural para anúncio (não na mesma tela em que oferecemos continuar com anúncio)
+function playAgain(fromWin) { const o = { endless: runType === 'endless' }; if (!fromWin && offeredAd) { startGame(0, o); return; } showAd('midgame', () => startGame(0, o)); }
+$('again').addEventListener('click', () => playAgain(false));
+$('again2').addEventListener('click', () => playAgain(true));
+$('contScroll').addEventListener('click', () => { if (bank < 30 || continued) return; bank -= 30; saveBank(); doContinue(); });
+$('contAd').addEventListener('click', () => {
+  if (continued) return;
+  showAd('rewarded', ok => { if (ok) doContinue(); else { $('contAd').hidden = true; $('overMsg').textContent = L().noAd; } });
+});
+document.querySelectorAll('.mutebtn').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); toggleMute(); }));
+$('langBtn').addEventListener('click', () => { lang = lang === 'pt' ? 'en' : 'pt'; Store.set('ninja3d-idioma', lang); applyLang(); });
+$('shopBtn').addEventListener('click', () => { audio(); $('menu').hidden = true; $('shop').hidden = false; renderShop(); });
+$('shopBack').addEventListener('click', () => { $('shop').hidden = true; $('menu').hidden = false; refreshMenu(); });
+function renderShop() {
+  $('shopBank').textContent = bank;
+  const g = $('shopGrid'); g.innerHTML = '';
+  for (const sk of SKINS) {
+    const card = document.createElement('div'); card.className = 'card' + (sk.id === skin ? ' on' : '');
+    const sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = sk.sw;
+    const nm = document.createElement('div'); nm.className = 'cname'; nm.textContent = L().skins[sk.id];
+    const bt = document.createElement('button'); const has = owned.includes(sk.id);
+    if (sk.id === skin) { bt.textContent = L().using; bt.disabled = true; }
+    else if (has) bt.textContent = L().use;
+    else { bt.textContent = sk.price + ' 📜'; if (bank < sk.price) bt.className = 'lock'; }
+    bt.addEventListener('click', () => {
+      if (!owned.includes(sk.id)) {
+        if (bank < sk.price) { $('shopMsg').textContent = L().missing(sk.price - bank); tone(200, 0.15, 'square', 0.08); return; }
+        bank -= sk.price; saveBank(); owned.push(sk.id); Store.set('ninja3d-roupas', JSON.stringify(owned)); SFX.power();
+      } else tone(660, 0.06, 'sine', 0.08);
+      skin = sk.id; Store.set('ninja3d-roupa', skin); applySkin(); $('shopMsg').textContent = ''; renderShop();
+    });
+    card.append(sw, nm, bt); g.appendChild(card);
+  }
+}
+$('play').addEventListener('click', () => startGame(0, { tutorial: !tutorialDone }));
+$('endlessBtn').addEventListener('click', () => startGame(0, { endless: true }));
+$('skipTut').addEventListener('click', e => { e.stopPropagation(); skipTutorial(); });
+$('missionsBtn').addEventListener('click', () => { audio(); $('menu').hidden = true; $('missionsPanel').hidden = false; renderMissions(); });
+$('missionsBack').addEventListener('click', () => { $('missionsPanel').hidden = true; $('menu').hidden = false; refreshMenu(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') togglePause(); });
 document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
-  modo = +b.dataset.m; try { localStorage.setItem('ninja3d-modo', String(modo)); } catch (e) {} refreshMenu(); audio(); tone(660, 0.06, 'sine', 0.08);
+  modo = +b.dataset.m; Store.set('ninja3d-modo', modo); refreshMenu(); audio(); tone(660, 0.06, 'sine', 0.08);
 }));
 function refreshMenu() {
   document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.m === modo)));
-  $('modeinfo').textContent = M().info;
-  const b = getBest(); $('best').textContent = b ? '🏆 Recorde no ' + M().nome + ': ' + b + ' pontos' : '';
+  $('modeinfo').textContent = L().modes[modo].info;
+  const b = getBest(); const bi = +(Store.get('ninja3d-recorde-inf-' + modo) || 0);
+  $('best').textContent = (b ? L().recordIn(modeName(), b) : '') + (bi ? '  •  ' + L().endlessBest(bi) : '');
+  ensureMissions(); $('missionsBadge').textContent = missionsState.active.filter(m => m.p > 0).length ? '•' : '';
+  $('bankInfo').textContent = '📜 ' + bank;
 }
 
 // ---------------- Atualização ----------------
@@ -569,8 +847,8 @@ const tmp = new THREE.Vector3();
 function hitPlayer(it) {
   if (inv > 0) return false;
   if (it) { it.alive = false; scene.remove(it.obj); }
-  if (shield) { shield = false; bubble.visible = false; inv = 1.0; SFX.shield(); if (power.name === 'escudo') { power.name = null; $('powerbox').hidden = true; } return false; }
-  lives--; SFX.hit(); updateHearts(); inv = 1.3; chaserT = 5;
+  if (shield) { shield = false; bubble.visible = false; inv = 1.0; SFX.shield(); shake = 0.2; burst(tmp.set(P.x, P.y + 1, P.z), 0x5ac8ff, 18, 5, 2, 0.12, 0.5); if (power.name === 'escudo') { power.name = null; $('powerbox').hidden = true; } return false; }
+  lives--; SFX.hit(); updateHearts(); inv = 1.3; chaserT = 5; shake = 0.45; scrollStreak = 0; hurtFlash(); burst(tmp.set(P.x, P.y + 1, P.z - 0.3), 0xff4a3a, 16, 5, 3, 0.12, 0.5); burst(tmp.set(P.x, P.y + 1, P.z - 0.3), 0xffffff, 8, 4, 2, 0.1, 0.4);
   speed = Math.max(M().vel0, speed * 0.85);
   if (lives <= 0) { gameOver(); return true; }
   return false;
@@ -578,11 +856,16 @@ function hitPlayer(it) {
 function update(dt) {
   time += dt;
   const bossOn = phase === 5;
-  speed = Math.min(bossOn ? Math.min(M().velMax, 22) : M().velMax, speed + M().acel * dt);
+  const vmax = runType === 'endless' ? M().velMax * Math.min(1.4, 1 + lap * 0.08) : M().velMax;
+  speed = tut ? 11 : Math.min(bossOn ? Math.min(M().velMax, 22) : vmax, speed + M().acel * dt);
   const dz = speed * dt; dist += dz; P.z -= dz;
 
   P.x += (LANES[P.lane] - P.x) * Math.min(1, dt * 14);
   if (P.y > 0 || P.vy > 0) { P.vy -= 28 * dt; P.y += P.vy * dt; if (P.y <= 0) { P.y = 0; P.vy = 0; } }
+  if (wasAir && P.y <= 0) { burst(tmp.set(P.x, 0.08, P.z), 0xcfc6b0, 10, 3, 1.2, 0.1, 0.4); land = 0.18; SFX.land(); }
+  wasAir = P.y > 0;
+  if (streakT > 0) { streakT -= dt; if (streakT <= 0) scrollStreak = 0; }
+  dustT -= dt; if (dustT <= 0 && P.y <= 0 && P.roll <= 0) { dustT = 0.06; burst(tmp.set(P.x + rnd(-0.2, 0.2), 0.05, P.z + 0.3), 0xb9ae95, 1, 0.8, 0.8, 0.07, 0.35); }
   if (P.roll > 0) P.roll -= dt;
   if (inv > 0) inv -= dt;
   if (chaserT > 0) chaserT -= dt;
@@ -596,9 +879,10 @@ function update(dt) {
   world.position.z = P.z - 60; scrollTextures();
 
   // troca de fase
-  if (!bossOn && dist >= (phase + 1) * PHASE_LEN) nextPhase();
+  if (!bossOn && dist >= nextPhaseAt) nextPhase();
 
-  if (!bossOn) { while (nextRowZ > P.z - 110) { genRow(nextRowZ); nextRowZ -= rowGap(); } }
+  if (tut) updateTutorial(dt);
+  else if (!bossOn) { while (nextRowZ > P.z - 110) { genRow(nextRowZ); nextRowZ -= rowGap(); } }
   else updateBoss(dt);
 
   // ímã: pergaminhos voam até o ninja
@@ -619,10 +903,11 @@ function update(dt) {
     if (it.kind === 'fly') it.obj.position.y = 1.45 + Math.sin(time * 6 + it.z) * 0.08;
     const ib = it.box, ix = it.obj.position.x;
     if (ix - ib.w / 2 < pb.x2 && ix + ib.w / 2 > pb.x1 && it.z - ib.d / 2 < pb.z2 && it.z + ib.d / 2 > pb.z1 && ib.y < pb.y2 && ib.y + ib.h > pb.y1) {
-      if (it.kind === 'scroll') { it.alive = false; scene.remove(it.obj); scrolls++; $('scrolls').textContent = scrolls; SFX.scroll(); }
-      else if (it.kind === 'heart') { it.alive = false; scene.remove(it.obj); if (lives < M().vidas) lives++; updateHearts(); SFX.life(); }
-      else if (it.kind === 'power') { it.alive = false; scene.remove(it.obj); givePower(it.name); }
+      if (it.kind === 'scroll') { it.alive = false; scene.remove(it.obj); scrolls++; scrollStreak++; streakT = 0.9; $('scrolls').textContent = scrolls; SFX.scroll(); burst(it.obj.position, 0xffd34a, 6, 3, 2, 0.08, 0.4); popup('+10', '#ffd34a'); runStats.scrolls++; }
+      else if (it.kind === 'heart') { it.alive = false; scene.remove(it.obj); if (lives < M().vidas) lives++; updateHearts(); SFX.life(); burst(it.obj.position, 0xff5a7a, 12, 3.5, 2, 0.1, 0.5); popup('❤️', '#ff8aa0'); }
+      else if (it.kind === 'power') { it.alive = false; scene.remove(it.obj); givePower(it.name); burst(it.obj.position, 0x7fd8ff, 18, 4.5, 2.5, 0.11, 0.6); mission('powers', 1); }
       else if (it.kind === 'bomb') { it.alive = false; scene.remove(it.obj); throwBomb(); }
+      else if (tut) { it.alive = false; scene.remove(it.obj); }
       else if (hitPlayer(it)) return;
     }
   }
@@ -633,7 +918,7 @@ function update(dt) {
 }
 function givePower(name) {
   power.name = name; power.t = POWER_TIME; SFX.power();
-  $('powerbox').hidden = false; $('powericon').textContent = POWER_INFO[name][0]; $('powername').textContent = POWER_INFO[name][1];
+  $('powerbox').hidden = false; $('powericon').textContent = POWER_ICON[name]; $('powername').textContent = L().powers[name];
   if (name === 'escudo') { shield = true; bubble.visible = true; } else { shield = false; bubble.visible = false; }
 }
 
@@ -679,10 +964,10 @@ function place(dt) {
   player.position.set(P.x, P.y, P.z);
   const air = P.y > 0.05, rolling = P.roll > 0;
   if (dpRun && dpJump) { dpRun.visible = !air; dpJump.visible = air; }
-  player.rotation.z = (P.x - LANES[P.lane]) * 0.12;
+  player.rotation.z = (P.x - LANES[P.lane]) * 0.22; player.rotation.y = (P.x - LANES[P.lane]) * -0.12;
   if (state === 'win') { player.rotation.set(0, 0, 0); player.scale.set(1, 1, 1); P.y = Math.abs(Math.sin(time * 6)) * 0.6; dpRun.visible = P.y < 0.2; dpJump.visible = P.y >= 0.2; }
   else if (rolling) { player.scale.set(1, 0.5, 1); player.rotation.x = -(0.62 - P.roll) / 0.62 * Math.PI * 2; }
-  else { player.scale.set(1, 1, 1); player.rotation.x = 0; if (!air && dpRun) dpRun.position.y = Math.abs(Math.sin(time * 14)) * 0.08; }
+  else { if (land > 0) { land -= dt; const k = land / 0.18; player.scale.set(1 + 0.15 * k, 1 - 0.22 * k, 1); } else player.scale.set(1, 1, 1); player.rotation.x = 0; if (!air && dpRun) dpRun.position.y = Math.abs(Math.sin(time * 14)) * 0.08; }
   player.visible = !(inv > 0 && Math.floor(inv * 10) % 2 === 0);
   shadow.position.set(P.x, 0.02, P.z); shadow.scale.setScalar(1 - Math.min(0.6, P.y * 0.25));
   bubble.material.opacity = 0.22 + Math.sin(time * 6) * 0.06;
@@ -711,17 +996,165 @@ function place(dt) {
 
   const cx = P.x * 0.75;
   if (state === 'win') { camera.position.lerp(tmp.set(P.x + 0.8, 1.8, P.z - 5.5), Math.min(1, dt * 2)); camera.lookAt(P.x + 0.8, 1.1, P.z); }
-  else { camera.position.set(cx, 3.1 + P.y * 0.35, P.z + 5.6); camera.lookAt(cx, 1.2 + P.y * 0.25, P.z - 6); }
+  else {
+    const sk = shake > 0.01 ? shake : 0; shake *= Math.exp(-dt * 7);
+    const fovK = state === 'play' ? Math.min(1, Math.max(0, (speed - M().vel0) / (M().velMax - M().vel0))) : 0;
+    const fov = (camera.aspect < 0.8 ? 70 : 60) + fovK * 8; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+    camera.position.set(cx + rnd(-sk, sk) * 0.6, 3.1 + P.y * 0.35 + rnd(-sk, sk) * 0.5, P.z + 5.6); camera.lookAt(cx, 1.2 + P.y * 0.25, P.z - 6);
+    updateSpeedLines(dt, fovK);
+  }
+}
+
+// ---------------- Partículas (cubinhos) ----------------
+let land = 0, dustT = 0;
+const PMAX = 360, partMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ fog: true }), PMAX);
+partMesh.frustumCulled = false; scene.add(partMesh);
+const parts = Array.from({ length: PMAX }, () => ({ life: 0 })); let pNext = 0;
+const _pc = new THREE.Color(), _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler(), _ps = new THREE.Vector3(), _pp = new THREE.Vector3();
+for (let i = 0; i < PMAX; i++) { _pm.makeScale(0, 0, 0); partMesh.setMatrixAt(i, _pm); partMesh.setColorAt(i, _pc.setHex(0xffffff)); }
+function burst(pos, color, n, spd, up, size, life) {
+  for (let k = 0; k < n; k++) {
+    const p = parts[pNext]; pNext = (pNext + 1) % PMAX;
+    p.x = pos.x; p.y = pos.y; p.z = pos.z; p.vx = rnd(-1, 1) * spd; p.vy = rnd(0.2, 1) * up * 2; p.vz = rnd(-1, 1) * spd;
+    p.life = p.max = life * rnd(0.7, 1.2); p.size = size * rnd(0.7, 1.3); p.r = rnd(0, 6);
+    partMesh.setColorAt((pNext + PMAX - 1) % PMAX, _pc.setHex(color));
+  }
+  partMesh.instanceColor.needsUpdate = true;
+}
+function updateParticles(dt) {
+  for (let i = 0; i < PMAX; i++) {
+    const p = parts[i]; if (p.life <= 0) continue;
+    p.life -= dt; p.vy -= 9 * dt; p.x += p.vx * dt; p.y = Math.max(0.02, p.y + p.vy * dt); p.z += p.vz * dt; p.r += dt * 8;
+    const k = Math.max(0, p.life / p.max) * p.size; _pp.set(p.x, p.y, p.z); _pe.set(p.r, p.r * 0.7, 0); _pq.setFromEuler(_pe); _ps.set(k, k, k);
+    _pm.compose(_pp, _pq, _ps); partMesh.setMatrixAt(i, _pm);
+  }
+  partMesh.instanceMatrix.needsUpdate = true;
+}
+// linhas de velocidade
+const SL = 26, slMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, fog: false });
+const slMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.025, 0.025, 2.2), slMat, SL); slMesh.frustumCulled = false; scene.add(slMesh);
+const sl = Array.from({ length: SL }, () => ({ a: rnd(0, Math.PI * 2), r: rnd(2.2, 4.2), z: rnd(-30, 0) }));
+function updateSpeedLines(dt, k) {
+  slMat.opacity = state === 'play' ? k * 0.45 : 0; slMesh.visible = slMat.opacity > 0.02; if (!slMesh.visible) return;
+  sl.forEach((l, i) => { l.z += speed * 2.2 * dt; if (l.z > 4) { l.z = rnd(-34, -20); l.a = rnd(0, Math.PI * 2); }
+    _pp.set(P.x + Math.cos(l.a) * l.r, 2 + Math.sin(l.a) * l.r * 0.7, P.z + l.z); _pm.makeTranslation(_pp.x, _pp.y, _pp.z); slMesh.setMatrixAt(i, _pm); });
+  slMesh.instanceMatrix.needsUpdate = true;
+}
+// textos que sobem ("+10") e flash vermelho de dano
+const _proj = new THREE.Vector3();
+function popup(text, color) {
+  const box = $('game'); if (!box) return; _proj.set(P.x, P.y + 2.1, P.z).project(camera);
+  const el = document.createElement('div'); el.className = 'pop'; el.textContent = text; el.style.color = color;
+  el.style.left = ((_proj.x + 1) / 2 * box.clientWidth + rnd(-18, 18)) + 'px'; el.style.top = ((1 - _proj.y) / 2 * box.clientHeight) + 'px';
+  box.appendChild(el); setTimeout(() => el.remove(), 750);
+}
+function hurtFlash() { const h = $('hurt'); h.style.transition = 'none'; h.style.opacity = 0.8; requestAnimationFrame(() => { h.style.transition = 'opacity .5s'; h.style.opacity = 0; }); }
+function toast(text) { const t = $('toast'); t.textContent = text; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); }
+
+// ---------------- Tutorial jogando (primeira vez) ----------------
+const TUT = ['lane', 'jump', 'roll', 'scroll'];
+function buildTutorial() {
+  let z = -34;
+  spawn('wall', 1, z); spawn('scroll', 0, z - 2); spawn('scroll', 2, z - 2); tutTag(0); z -= 30;
+  for (const l of [0, 1, 2]) spawn('low', l, z, { name: T.low[0] }); tutTag(1); z -= 30;
+  for (const l of [0, 1, 2]) spawn('fly', l, z, { name: T.fly[0] }); tutTag(2); z -= 26;
+  for (const l of [0, 1, 2]) for (let i = 0; i < 6; i++) spawn('scroll', l, z - i * 1.6); tutTag(3);
+  tut.endZ = z - 20; nextRowZ = z - 34;
+}
+function tutTag(step) { for (const it of items) if (it.tut === undefined) it.tut = step; }
+function tutText(step) {
+  const t = touchUsed || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  return step === 0 ? [t ? '👆↔️' : '⬅️ ➡️', t ? L().tutLaneT : L().tutLaneK] : step === 1 ? [t ? '👆⬆️' : '⬆️', t ? L().tutJumpT : L().tutJumpK]
+       : step === 2 ? [t ? '👆⬇️' : '⬇️', t ? L().tutRollT : L().tutRollK] : ['📜', L().tutScroll];
+}
+function showTut(step, text) {
+  const [ic, tx] = text || tutText(step); $('tutIcon').textContent = ic; $('tutText').textContent = tx; $('tut').hidden = false;
+}
+function hideTut() { const t = $('tut'); if (t) t.hidden = true; }
+function updateTutorial(dt) {
+  if (tut.step < 3) {
+    const obs = items.filter(it => it.alive && it.tut === tut.step && it.kind !== 'scroll');
+    const near = obs.reduce((m, it) => Math.min(m, P.z - it.z), 99);
+    if (!tut.waiting && tut.prompted !== tut.step && near < (tut.step === 0 ? 7 : 5.2) && near > 0) {
+      if (tut.step === 0 && P.lane !== 1) tut.prompted = 0; else { tut.waiting = true; tut.prompted = tut.step; timeTarget = 0.08; showTut(tut.step); } }
+    if (obs.length === 0 || near < -2) { tut.step++; tut.waiting = false; timeTarget = 1; hideTut(); }
+  } else if (tut.step === 3) {
+    const sc = items.filter(it => it.alive && it.tut === 3); const near = sc.reduce((m, it) => Math.min(m, P.z - it.z), 99);
+    if (near < 14 && !tut.msgT) { showTut(3); tut.msgT = 1; }
+    if (P.z < tut.endZ) { tut.step = 4; tut.msgT = 2.2; showTut(4, ['🏃💨', L().tutGo]); }
+  } else { tut.msgT -= dt; if (tut.msgT <= 0) endTutorial(); }
+}
+function tutAction(a) {
+  const need = TUT[tut.step];
+  if ((need === 'lane' && (a === 'left' || a === 'right')) || need === a) { tut.waiting = false; timeTarget = 1; hideTut(); SFX.mission(); }
+}
+function endTutorial() {
+  tut = null; timeTarget = 1; hideTut(); $('skipTut').hidden = true; tutorialDone = true; Store.set('ninja3d-tutorial', '1');
+  const t = $('tip'); t.hidden = false; t.style.opacity = 1; setTimeout(() => { t.style.opacity = 0; }, 3500); setTimeout(() => { t.hidden = true; }, 4000);
+}
+function skipTutorial() {
+  if (!tut) return;
+  for (const it of items) if (it.tut !== undefined) { it.alive = false; scene.remove(it.obj); }
+  nextRowZ = P.z - 30; endTutorial();
+}
+
+// ---------------- Missões ----------------
+const MPOOL = [
+  { id: 'sc30', t: 'runScrolls', n: 30, r: 20 }, { id: 'sc60', t: 'runScrolls', n: 60, r: 30 }, { id: 'sc100', t: 'runScrolls', n: 100, r: 50 },
+  { id: 'j25', t: 'jumps', n: 25, r: 20 }, { id: 'j60', t: 'jumps', n: 60, r: 30 }, { id: 'r15', t: 'rolls', n: 15, r: 20 }, { id: 'r40', t: 'rolls', n: 40, r: 30 },
+  { id: 'p3', t: 'powers', n: 3, r: 25 }, { id: 'ph3', t: 'reachPhase', n: 3, r: 30 }, { id: 'ph5', t: 'reachPhase', n: 5, r: 45 }, { id: 'boss', t: 'boss', n: 1, r: 60 },
+  { id: 'inf1k', t: 'endlessDist', n: 1000, r: 40 }, { id: 'inf3k', t: 'endlessDist', n: 3000, r: 70 }, { id: 'runs5', t: 'runs', n: 5, r: 20 }, { id: 'lane50', t: 'lanes', n: 50, r: 15 },
+];
+const PERRUN = { runScrolls: 1, reachPhase: 1, endlessDist: 1, boss: 0 };
+function ensureMissions() {
+  if (!missionsState || !Array.isArray(missionsState.active)) missionsState = { active: [], done: 0 };
+  missionsState.active = missionsState.active.filter(m => MPOOL.some(x => x.id === m.id));
+  while (missionsState.active.length < 3) {
+    const pool = MPOOL.filter(x => !missionsState.active.some(m => m.id === x.id) && x.id !== missionsState.last);
+    const pick = pool[Math.floor(Math.random() * pool.length)]; missionsState.active.push({ id: pick.id, p: 0 });
+  }
+}
+function saveMissions() { Store.set('ninja3d-missoes', JSON.stringify(missionsState)); }
+function mtext(def) { return MTXT[lang][def.t](def.n); }
+function mission(type, v) {
+  if (tut && type !== 'runs') return; ensureMissions(); let changed = false;
+  for (const m of [...missionsState.active]) {
+    const def = MPOOL.find(x => x.id === m.id); if (!def || def.t !== type) continue;
+    if (PERRUN[type]) { if (v > m.p) { m.p = v; changed = true; } } else { m.p += v; changed = true; }
+    if (m.p >= def.n) {
+      missionsState.active = missionsState.active.filter(x => x !== m); missionsState.done++; missionsState.last = m.id;
+      bank += def.r; saveBank(); SFX.mission(); toast(L().missionDone(mtext(def), def.r)); ensureMissions();
+    }
+  }
+  if (changed) saveMissions();
+}
+function endRunMissions() {
+  if (!runStats) return;
+  mission('runScrolls', scrolls);
+  if (runType === 'endless') mission('endlessDist', Math.floor(dist));
+}
+function renderMissions() {
+  ensureMissions(); const box = $('missionsList'); box.innerHTML = '';
+  for (const m of missionsState.active) {
+    const def = MPOOL.find(x => x.id === m.id); const row = document.createElement('div'); row.className = 'mrow';
+    const p = Math.min(m.p, def.n);
+    row.innerHTML = `<div class="mtop"><span></span><b>+${def.r} 📜</b></div><div class="bar"><div style="width:${p / def.n * 100}%"></div></div><small>${p} / ${def.n}</small>`;
+    row.querySelector('span').textContent = mtext(def); box.appendChild(row);
+  }
+  $('missionsBank').textContent = bank;
 }
 
 // ---------------- Laço ----------------
 let last = performance.now();
+const STEP = 1 / 120; let acc = 0;
 function loop(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (state === 'play') { update(dt); music(dt); }
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  timeScale += (timeTarget - timeScale) * Math.min(1, dt * 12);
+  if (state !== 'play') acc = 0;
+  if (state === 'play') { acc += dt * timeScale; let n = 0; while (acc >= STEP && n < 24) { update(STEP); acc -= STEP; n++; if (state !== 'play') { acc = 0; break; } } }
   else if (state === 'menu' || state === 'loading') { time += dt; P.z -= dt * 6; dist += dt * 6; world.position.z = P.z - 60; scrollTextures(); }
   else if (state === 'over' || state === 'win') { time += dt; }
-  if (state !== 'paused') { updateEffects(dt); updateConfetti(dt); }
+  if (state !== 'paused') { const edt = dt * (state === 'play' ? timeScale : 1); updateEffects(edt); updateConfetti(edt); updateRainbow(dt); updateParticles(edt); }
   if (phase === 5 && state === 'play') updateBoss2(dt);
   place(dt);
   renderer.render(scene, camera);
@@ -732,6 +1165,8 @@ function updateBoss2() { /* espaço para efeitos extras do chefão */ }
 // ---------------- Início ----------------
 (async function init() {
   resize(); applyTheme(0);
+  await initPlatform(); cgCall('loadingStart');
+  loadSave(); applyLang(); updateMuteBtns();
   $('logo').src = IMG['titulo-ninja-em-acao'];
   requestAnimationFrame(loop);
   dpRun = await voxel('dead-power-1-parado', 32, 1.75, 4);
@@ -753,10 +1188,15 @@ function updateBoss2() { /* espaço para efeitos extras do chefão */ }
   await makeBlocks(); makePowers();
   // pré-carrega as texturas dos 5 cenários
   for (const t of THEMES) { getTex(t.floor); getTex(t.wall); if (t.ceil) getTex(t.ceil); }
-  state = 'menu'; refreshMenu();
+  applySkin();
+  state = 'menu'; refreshMenu(); cgCall('loadingStop');
+  ensureMissions(); saveMissions();
+  if (!tutorialDone) { modo = 0; startGame(0, { tutorial: true }); }  // primeira vez: começa jogando, com tutorial
 })();
 
 // ganchos para testes automáticos
 window.__n3d = { get state() { return state; }, get dist() { return dist; }, get lives() { return lives; }, get speed() { return speed; },
   get scrolls() { return scrolls; }, get phase() { return phase; }, get boss() { return boss; }, get power() { return power; },
-  P, items, act, start: (p) => startGame(p || 0), setModo: m => { modo = m; refreshMenu(); } };
+  P, items, act, start: (p) => startGame(p || 0), setModo: m => { modo = m; refreshMenu(); },
+  get bank() { return bank; }, setBank: n => { bank = n; saveBank(); refreshMenu(); }, get skin() { return skin; }, get lang() { return lang; },
+  get continued() { return continued; }, get tut() { return tut; }, get timeScale() { return timeScale; }, get missions() { return missionsState; }, startEndless: () => startGame(0, { endless: true }), startTut: () => startGame(0, { tutorial: true }), skipTut: () => skipTutorial(), get adsOn() { return adsOn; }, hit: () => hitPlayer(null), setDist: d => { dist = d; } };

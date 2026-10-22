@@ -56,7 +56,44 @@
   #bossbar .bar { height:12px; border:2px solid #000; background:#3a1010; margin-top:3px; }
   #bossbar .bar > div { background:linear-gradient(#ff6b5a, #c0392b); }
   #tip { position:absolute; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); left:0; right:0; text-align:center; pointer-events:none; transition:opacity .5s; }
+  .mutebtn { pointer-events:auto; width:36px; height:36px; border-radius:50%; border:2px solid var(--ink); background:#fffd; font-size:16px; }
+  #menuTools { position:absolute; top:calc(10px + env(safe-area-inset-top, 0px)); right:calc(10px + env(safe-area-inset-right, 0px)); display:flex; gap:8px; }
+  .chip { border:2px solid var(--ink); background:#fffd; color:var(--ink); border-radius:18px; font-weight:800; font-size:14px; padding:6px 12px; }
+  .shopbtn { background:#8e44ad; font-size:17px; padding:9px 18px; }
+  #bankInfo { font-weight:900; color:var(--gold); text-shadow:0 2px 0 #000a; }
+  .overlay.light { background:rgba(11,14,34,.28); justify-content:flex-start; padding-top:calc(14px + env(safe-area-inset-top, 0px)); }
+  .panel { background:rgba(10,14,34,.88); border:3px solid var(--gold); border-radius:16px; padding:10px 12px; width:min(100%, 620px); display:flex; flex-direction:column; gap:8px; align-items:center; }
+  #shopGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(92px, 1fr)); gap:8px; width:100%; }
+  .card { background:#1f2747; border:2px solid #3a4470; border-radius:12px; padding:8px 4px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .card.on { border-color:var(--gold); }
+  .swatch { width:30px; height:30px; border-radius:50%; border:2px solid #fff; }
+  .cname { font-weight:800; font-size:13px; }
+  .card button { border:2px solid var(--ink); border-radius:10px; background:#2ea44f; color:#fff; font-weight:900; font-size:13px; padding:5px 8px; min-width:78px; }
+  .card button.lock { background:#555c74; }
+  .card button:disabled { background:#d4a017; opacity:1; }
+  .cont { width:min(90%, 300px); font-size:18px; padding:10px 14px; }
+  #contAd { background:#2ea44f; } #contScroll { background:#2ea44f; }
+  #adwait { background:rgba(0,0,0,.8); z-index:20; }
   #tip span { background:rgba(10,14,34,.75); border-radius:12px; padding:8px 12px; font-weight:800; font-size:14px; }
+  .pop { position:absolute; transform:translate(-50%, 0); font-weight:900; font-size:20px; text-shadow:0 2px 0 #000c; pointer-events:none; animation:popup .75s ease-out forwards; z-index:4; }
+  @keyframes popup { from { opacity:1; transform:translate(-50%, 0) scale(.8); } 30% { transform:translate(-50%, -14px) scale(1.15); } to { opacity:0; transform:translate(-50%, -54px) scale(1); } }
+  #hurt { position:absolute; inset:0; pointer-events:none; opacity:0; background:radial-gradient(ellipse at center, rgba(255,0,0,0) 45%, rgba(220,20,20,.75) 100%); z-index:3; }
+  #toast { position:absolute; left:50%; top:calc(64px + env(safe-area-inset-top, 0px)); transform:translateX(-50%); background:rgba(10,14,34,.9); border:3px solid #2ecc71; border-radius:14px;
+    padding:8px 14px; font-weight:900; font-size:16px; pointer-events:none; opacity:0; z-index:6; white-space:nowrap; max-width:92%; overflow:hidden; text-overflow:ellipsis; }
+  #toast.show { animation:toast 2.6s ease forwards; }
+  @keyframes toast { 0% { opacity:0; transform:translate(-50%, -10px); } 10%, 80% { opacity:1; transform:translate(-50%, 0); } 100% { opacity:0; } }
+  #tut { position:absolute; left:0; right:0; top:28%; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:none; z-index:5; }
+  #tutIcon { font-size:54px; animation:pulse .7s ease-in-out infinite alternate; filter:drop-shadow(0 4px 0 #000a); }
+  #tutText { background:rgba(10,14,34,.88); border:3px solid var(--gold); border-radius:14px; padding:8px 14px; font-weight:900; font-size:20px; text-align:center; max-width:90%; }
+  @keyframes pulse { from { transform:scale(1); } to { transform:scale(1.15); } }
+  #skipTut { position:absolute; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); right:calc(12px + env(safe-area-inset-right, 0px)); z-index:7; }
+  .rowbtns { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .endless { background:#16a085; } .missionsbtn { background:#c0392b; font-size:17px; padding:9px 18px; position:relative; }
+  #missionsBadge { position:absolute; top:-6px; right:-4px; color:var(--gold); font-size:26px; line-height:1; }
+  .mrow { width:100%; background:#1f2747; border:2px solid #3a4470; border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:5px; text-align:left; }
+  .mtop { display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:14px; } .mtop b { color:var(--gold); white-space:nowrap; }
+  .mrow .bar > div { background:#2ecc71; } .mrow small { opacity:.8; font-weight:700; }
+  @media (max-height: 460px) { .logo { width:min(42%, 240px); } #menu { gap:6px; } #menu .hint { font-size:11px !important; } #menu .title { font-size:14px !important; } .modes button, .big { padding:6px 12px; font-size:15px; } }
 </style>
 </head>
 <body>
@@ -64,59 +101,92 @@
   <canvas id="c" aria-label="Jogo Ninja em Ação 3D"></canvas>
   <div class="hud" id="hud" hidden>
     <div style="display:flex;flex-direction:column;gap:6px">
-      <div class="pill"><span id="score">0</span><small>pontos</small></div>
+      <div class="pill"><span id="score">0</span><small data-i18n="points">pontos</small></div>
       <div class="pill">📜 <span id="scrolls">0</span></div>
       <div class="pill phasepill" id="phase">Fase 1/5 • Escola</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <div class="pill hearts" id="hearts"></div>
+      <button class="mutebtn" aria-label="Som">🔊</button>
       <button id="pause" aria-label="Pausar">⏸</button>
     </div>
   </div>
   <img id="banner" alt="" hidden>
   <div id="bannerText" hidden></div>
   <div id="powerbox" hidden><div class="pill"><div><span id="powericon">🌀</span> <span id="powername">Poder</span></div><div class="bar"><div id="powerfill"></div></div></div></div>
-  <div id="bossbar" hidden>MÃO AFIADA<div class="bar"><div id="bossfill"></div></div></div>
-  <div id="tip" hidden><span>Deslize: ↑ pular • ↓ rolar • ← → trocar de pista</span></div>
+  <div id="bossbar" hidden><span data-i18n="boss">MÃO AFIADA</span><div class="bar"><div id="bossfill"></div></div></div>
+  <div id="hurt"></div>
+  <div id="toast"></div>
+  <div id="tut" hidden><div id="tutIcon">⬆️</div><div id="tutText"></div></div>
+  <button class="chip" id="skipTut" data-i18n="skip" hidden>Pular tutorial ⏭</button>
+  <div id="tip" hidden><span data-i18n="tip">Deslize: ↑ pular • ↓ rolar • ← → trocar de pista</span></div>
 
   <div class="overlay" id="menu">
+    <div id="menuTools"><button class="chip" id="langBtn" data-i18n="lang">🌐 English</button><button class="mutebtn" aria-label="Som">🔊</button></div>
     <img class="logo" id="logo" alt="Ninja em Ação!">
-    <p class="title" style="font-size:20px">3D</p>
+    <p class="title" style="font-size:20px" data-i18n="subtitle">3D</p>
     <div class="modes" role="group" aria-label="Modo">
-      <button class="m0" data-m="0">FÁCIL</button>
-      <button class="m1" data-m="1">MÉDIO</button>
-      <button class="m2" data-m="2">DIFÍCIL</button>
+      <button class="m0" data-m="0" data-i18n="easy">FÁCIL</button>
+      <button class="m1" data-m="1" data-i18n="medium">MÉDIO</button>
+      <button class="m2" data-m="2" data-i18n="hard">DIFÍCIL</button>
     </div>
     <div class="hint" id="modeinfo"></div>
-    <button class="big" id="play">JOGAR</button>
+    <div class="rowbtns"><button class="big" id="play" data-i18n="play">JOGAR</button><button class="big endless" id="endlessBtn" data-i18n="endless">♾️ INFINITO</button></div>
+    <div class="rowbtns"><button class="big shopbtn" id="shopBtn" data-i18n="shop">🛒 LOJA</button><button class="big missionsbtn" id="missionsBtn"><span data-i18n="missions">🎯 MISSÕES</span><span id="missionsBadge"></span></button><span id="bankInfo">📜 0</span></div>
     <div class="hint" id="best"></div>
-    <div class="hint" style="font-size:12px;opacity:.85">Celular: deslize o dedo • Computador: setas ou espaço</div>
-    <div class="hint" style="font-size:12px;opacity:.85">5 fases + chefão • Poderes: 🌀 ímã • 🛡️ escudo • 👟 super pulo</div>
+    <div class="hint" style="font-size:12px;opacity:.85" data-i18n="ctrlHint">Celular: deslize o dedo • Computador: setas ou espaço</div>
+    <div class="hint" style="font-size:12px;opacity:.85" data-i18n="powHint">5 fases + chefão • Poderes: 🌀 ímã • 🛡️ escudo • 👟 super pulo</div>
   </div>
 
   <div class="overlay" id="paused" hidden>
-    <p class="title">Pausado</p>
-    <button class="big" id="resume">CONTINUAR</button>
-    <button class="big alt" id="toMenu1">MENU</button>
+    <p class="title" data-i18n="paused">Pausado</p>
+    <button class="big" id="resume" data-i18n="resume">CONTINUAR</button>
+    <button class="big alt" id="toMenu1" data-i18n="menu">MENU</button>
   </div>
 
   <div class="overlay" id="win" hidden>
-    <p class="title" style="font-size:34px;color:var(--gold)">PARABÉNS!</p>
-    <div class="hint" style="font-size:16px">Você derrotou o Mão Afiada e reencontrou seu amigo!</div>
+    <p class="title" style="font-size:34px;color:var(--gold)" data-i18n="congrats">PARABÉNS!</p>
+    <div class="hint" style="font-size:16px" data-i18n="winText">Você derrotou o Mão Afiada e reencontrou seu amigo!</div>
     <div class="score-big" id="winScore">0</div>
     <div class="hint" id="winInfo"></div>
-    <button class="big" id="again2">JOGAR DE NOVO</button>
-    <button class="big alt" id="toMenu3">MENU</button>
-    <div class="hint" style="font-size:12px">Jogo 2 em breve!</div>
+    <button class="big" id="again2" data-i18n="again">JOGAR DE NOVO</button>
+    <button class="big alt" id="toMenu3" data-i18n="menu">MENU</button>
+    <div class="hint" style="font-size:12px" data-i18n="soon">Jogo 2 em breve!</div>
   </div>
 
   <div class="overlay" id="over" hidden>
-    <p class="title">O Mão Afiada te pegou!</p>
+    <p class="title" data-i18n="overTitle">O Mão Afiada te pegou!</p>
     <div class="score-big" id="finalScore">0</div>
     <div class="hint" id="finalInfo"></div>
-    <button class="big" id="again">JOGAR DE NOVO</button>
-    <button class="big alt" id="toMenu2">MENU</button>
+    <button class="big cont" id="contAd" data-i18n="contAd" hidden>📺 Continuar (anúncio)</button>
+    <button class="big cont" id="contScroll" data-i18n="contScroll" hidden>Continuar (30 📜)</button>
+    <div class="hint" id="overMsg"></div>
+    <button class="big" id="again" data-i18n="again">JOGAR DE NOVO</button>
+    <button class="big alt" id="toMenu2" data-i18n="menu">MENU</button>
   </div>
+
+  <div class="overlay light" id="shop" hidden>
+    <div class="panel">
+      <p class="title" style="font-size:22px" data-i18n="shopTitle">Loja do Dead Power</p>
+      <div class="hint"><span data-i18n="bank">Seus pergaminhos</span>: <b style="color:var(--gold)">📜 <span id="shopBank">0</span></b></div>
+      <div id="shopGrid"></div>
+      <div class="hint" id="shopMsg" style="color:var(--gold)"></div>
+      <div class="hint" style="font-size:12px" data-i18n="shopHint">Junte pergaminhos nas corridas para comprar roupas novas!</div>
+      <button class="big alt" id="shopBack" data-i18n="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div class="overlay light" id="missionsPanel" hidden>
+    <div class="panel">
+      <p class="title" style="font-size:22px" data-i18n="missionsTitle">Missões</p>
+      <div class="hint"><span data-i18n="bank">Seus pergaminhos</span>: <b style="color:var(--gold)">📜 <span id="missionsBank">0</span></b></div>
+      <div id="missionsList" style="display:flex;flex-direction:column;gap:8px;width:100%"></div>
+      <div class="hint" style="font-size:12px" data-i18n="missionsHint">Complete missões para ganhar pergaminhos!</div>
+      <button class="big alt" id="missionsBack" data-i18n="back">VOLTAR</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="adwait" hidden><p class="title" style="font-size:20px" data-i18n="wait">Carregando anúncio…</p></div>
 </div>
 <script src="assets.js"></script>
 <script type="module" src="game3d.js"></script>
